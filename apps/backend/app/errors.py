@@ -14,8 +14,25 @@ from fastapi import FastAPI, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 logger = structlog.stdlib.get_logger(__name__)
+
+# Standard status code to machine-readable error code mapping
+STATUS_CODE_MAP: dict[int, str] = {
+    400: "BAD_REQUEST",
+    401: "UNAUTHORIZED",
+    403: "FORBIDDEN",
+    404: "NOT_FOUND",
+    405: "METHOD_NOT_ALLOWED",
+    409: "CONFLICT",
+    422: "VALIDATION_ERROR",
+    429: "RATE_LIMITED",
+    500: "INTERNAL_ERROR",
+    502: "BAD_GATEWAY",
+    503: "SERVICE_UNAVAILABLE",
+    504: "GATEWAY_TIMEOUT",
+}
 
 
 class APIError(BaseModel):
@@ -44,6 +61,40 @@ class AppException(Exception):
         super().__init__(message)
 
 
+class BadRequestError(AppException):
+    """Client sent an invalid request."""
+
+    def __init__(self, message: str, details: dict[str, Any] | None = None) -> None:
+        super().__init__(
+            code="BAD_REQUEST",
+            message=message,
+            status_code=status.HTTP_400_BAD_REQUEST,
+            details=details,
+        )
+
+
+class UnauthorizedError(AppException):
+    """Authentication required or invalid."""
+
+    def __init__(self, message: str = "Authentication required.") -> None:
+        super().__init__(
+            code="UNAUTHORIZED",
+            message=message,
+            status_code=status.HTTP_401_UNAUTHORIZED,
+        )
+
+
+class ForbiddenError(AppException):
+    """Authorization denied."""
+
+    def __init__(self, message: str = "Access denied.") -> None:
+        super().__init__(
+            code="FORBIDDEN",
+            message=message,
+            status_code=status.HTTP_403_FORBIDDEN,
+        )
+
+
 class NotFoundError(AppException):
     """Resource not found."""
 
@@ -68,25 +119,19 @@ class ConflictError(AppException):
         )
 
 
-class ForbiddenError(AppException):
-    """Authorization denied."""
+class ServiceUnavailableError(AppException):
+    """Required backend service or dependency is currently unavailable."""
 
-    def __init__(self, message: str = "Access denied.") -> None:
+    def __init__(
+        self,
+        message: str = "Service temporarily unavailable.",
+        details: dict[str, Any] | None = None,
+    ) -> None:
         super().__init__(
-            code="FORBIDDEN",
+            code="SERVICE_UNAVAILABLE",
             message=message,
-            status_code=status.HTTP_403_FORBIDDEN,
-        )
-
-
-class UnauthorizedError(AppException):
-    """Authentication required or invalid."""
-
-    def __init__(self, message: str = "Authentication required.") -> None:
-        super().__init__(
-            code="UNAUTHORIZED",
-            message=message,
-            status_code=status.HTTP_401_UNAUTHORIZED,
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            details=details,
         )
 
 
@@ -114,6 +159,28 @@ def register_exception_handlers(app: FastAPI) -> None:
                 code=exc.code,
                 message=exc.message,
                 details=exc.details,
+                request_id=request_id,
+            ).model_dump(),
+        )
+
+    @app.exception_handler(StarletteHTTPException)
+    async def http_exception_handler(request: Request, exc: StarletteHTTPException) -> JSONResponse:
+        request_id = _get_request_id(request)
+        code = STATUS_CODE_MAP.get(exc.status_code, "HTTP_ERROR")
+        message = str(exc.detail) if exc.detail else "An HTTP error occurred."
+        logger.warning(
+            "http_exception",
+            code=code,
+            message=message,
+            status_code=exc.status_code,
+            request_id=request_id,
+        )
+        return JSONResponse(
+            status_code=exc.status_code,
+            content=APIError(
+                code=code,
+                message=message,
+                details={},
                 request_id=request_id,
             ).model_dump(),
         )

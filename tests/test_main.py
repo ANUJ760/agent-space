@@ -24,6 +24,7 @@ def app() -> FastAPI:
         debug=True,
         log_format="text",
         cors_origins=["http://localhost:3000"],
+        database_url="sqlite+aiosqlite:///:memory:",
     )
     return create_app(settings=settings)
 
@@ -42,12 +43,20 @@ class TestHealthEndpoints:
     def test_liveness_returns_ok(self, client: TestClient) -> None:
         resp = client.get("/api/v1/health/live")
         assert resp.status_code == 200
-        assert resp.json() == {"status": "ok"}
+        data = resp.json()
+        assert data["status"] == "ok"
+        assert data["process"] == "alive"
+        assert "version" in data
 
     def test_readiness_returns_ok(self, client: TestClient) -> None:
         resp = client.get("/api/v1/health/ready")
         assert resp.status_code == 200
-        assert resp.json() == {"status": "ok"}
+        data = resp.json()
+        assert data["status"] == "ready"
+        assert "database" in data["checks"]
+        assert data["checks"]["database"]["status"] == "up"
+        assert data["checks"]["database"]["latency_ms"] is not None
+        assert "timestamp" in data
 
 
 # ─── Request ID Middleware ───────────────────────────────────────────────────
