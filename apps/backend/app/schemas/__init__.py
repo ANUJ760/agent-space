@@ -1,5 +1,10 @@
 """Pydantic schemas package."""
 
+from app.schemas.agent import (
+    AgentCreate,
+    AgentResponse,
+    AgentUpdate,
+)
 from app.schemas.organization import (
     OrganizationCreate,
     OrganizationResponse,
@@ -19,6 +24,9 @@ from app.schemas.project_member import (
 from app.schemas.user import UserProfileResponse, UserResponse
 
 __all__ = [
+    "AgentCreate",
+    "AgentResponse",
+    "AgentUpdate",
     "OrganizationCreate",
     "OrganizationResponse",
     "OrganizationUpdate",
