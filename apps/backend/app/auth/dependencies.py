@@ -1,12 +1,30 @@
-"""FastAPI authentication dependencies for verifying Keycloak bearer tokens."""
+"""FastAPI authentication and authorization dependencies.
 
-from typing import Annotated
+Provides:
+- Token extraction and signature verification
+- CurrentUserDep (Keycloak token identity)
+- CurrentActorDep (database-reconciled principal with organization context)
+- Declarative RBAC role and permission guards (require_role, require_permission)
+"""
+
+from collections.abc import Callable, Coroutine
+from typing import Annotated, Any
 
 from fastapi import Depends, Request
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.models import AuthenticatedUser
 from app.auth.oidc import OIDCClient, get_oidc_client
-from app.errors import UnauthorizedError
+from app.auth.rbac import (
+    ROLE_HIERARCHY,
+    Actor,
+    Permission,
+    Role,
+    has_permission,
+)
+from app.database import get_db_session
+from app.errors import ForbiddenError, UnauthorizedError
+from app.services.user_service import reconcile_user
 
 
 def get_token_from_header(request: Request) -> str:
@@ -62,3 +80,54 @@ async def get_optional_current_user(
 # Dependency Type Aliases
 CurrentUserDep = Annotated[AuthenticatedUser, Depends(get_current_user)]
 OptionalUserDep = Annotated[AuthenticatedUser | None, Depends(get_optional_current_user)]
+
+
+# ─── RBAC Actor Dependencies ────────────────────────────────────────────────
+
+
+async def get_current_actor(
+    current_user: CurrentUserDep,
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+) -> Actor:
+    """Resolve database user and return an active Actor security principal."""
+    db_user = await reconcile_user(session, current_user)
+    try:
+        role = Role(db_user.role)
+    except ValueError:
+        role = Role.MEMBER
+
+    return Actor(
+        id=db_user.id,
+        external_subject=db_user.external_subject,
+        organization_id=db_user.organization_id,
+        role=role,
+    )
+
+
+CurrentActorDep = Annotated[Actor, Depends(get_current_actor)]
+
+
+def require_role(min_role: Role) -> Callable[..., Coroutine[Any, Any, Actor]]:
+    """FastAPI dependency factory enforcing a minimum role hierarchy rank."""
+
+    async def _role_guard(actor: CurrentActorDep) -> Actor:
+        actor_rank = ROLE_HIERARCHY.get(actor.role, 0)
+        required_rank = ROLE_HIERARCHY.get(min_role, 0)
+        if actor_rank < required_rank:
+            raise ForbiddenError(
+                f"Insufficient privilege. Minimum role required: '{min_role.value}'."
+            )
+        return actor
+
+    return _role_guard
+
+
+def require_permission(permission: Permission) -> Callable[..., Coroutine[Any, Any, Actor]]:
+    """FastAPI dependency factory enforcing a specific permission."""
+
+    async def _permission_guard(actor: CurrentActorDep) -> Actor:
+        if not has_permission(actor, permission):
+            raise ForbiddenError(f"Missing required permission: '{permission.value}'.")
+        return actor
+
+    return _permission_guard
