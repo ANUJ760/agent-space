@@ -15,6 +15,7 @@ if TYPE_CHECKING:
     from app.models.agent import Agent
     from app.models.organization import Organization
     from app.models.project import Project
+    from app.models.task_dependency import TaskDependency
     from app.models.user import User
 
 
@@ -73,3 +74,16 @@ class Task(Base, UUIDPrimaryKeyMixin, TimestampMixin, VersionMixin):
     assigned_agent: Mapped["Agent | None"] = relationship("Agent")
     assigned_user: Mapped["User | None"] = relationship("User", foreign_keys=[assigned_user_id])
     created_by: Mapped["User | None"] = relationship("User", foreign_keys=[created_by_id])
+
+    prerequisite_dependencies: Mapped[list["TaskDependency"]] = relationship(
+        "TaskDependency",
+        foreign_keys="[TaskDependency.task_id]",
+        back_populates="task",
+        cascade="all, delete-orphan",
+    )
+    dependent_tasks: Mapped[list["TaskDependency"]] = relationship(
+        "TaskDependency",
+        foreign_keys="[TaskDependency.depends_on_task_id]",
+        back_populates="depends_on_task",
+        cascade="all, delete-orphan",
+    )

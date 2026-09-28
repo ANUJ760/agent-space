@@ -1,4 +1,4 @@
-"""Task API endpoints for project tasks and lifecycle transitions."""
+"""Task API endpoints for project tasks, dependencies, assignments, and lifecycle transitions."""
 
 import uuid
 from typing import Annotated
@@ -13,10 +13,11 @@ from app.auth.rbac import (
     authorize_project_access,
 )
 from app.database import get_db_session
-from app.errors import NotFoundError
+from app.errors import ConflictError, NotFoundError
 from app.models.task import Task
 from app.repositories.agent_repo import AgentRepository
 from app.repositories.project_repo import ProjectRepository
+from app.repositories.task_dependency_repo import TaskDependencyRepository
 from app.repositories.task_repo import TaskRepository
 from app.repositories.user_repo import UserRepository
 from app.schemas.task import (
@@ -24,6 +25,10 @@ from app.schemas.task import (
     TaskResponse,
     TaskTransitionRequest,
     TaskUpdate,
+)
+from app.schemas.task_dependency import (
+    TaskDependencyCreate,
+    TaskDependencyResponse,
 )
 from app.services.task_state_machine import TaskStatus, check_transition_or_raise
 
@@ -148,7 +153,7 @@ async def get_task(
     "/tasks/{task_id}",
     response_model=TaskResponse,
     summary="Update Task",
-    description="Updates task properties. If status is provided, verifies state machine rules.",
+    description="Updates task properties. Supports state machine checks and optimistic concurrency locking.",
 )
 async def update_task(
     task_id: uuid.UUID,
@@ -156,7 +161,7 @@ async def update_task(
     actor: CurrentActorDep,
     session: Annotated[AsyncSession, Depends(get_db_session)],
 ) -> TaskResponse:
-    """Update task details and/or perform state transition."""
+    """Update task details and/or perform state transition with optional optimistic lock."""
     task_repo = TaskRepository(session)
     task = await task_repo.get_by_id(task_id)
 
@@ -166,6 +171,18 @@ async def update_task(
     # Enforce centralized state machine if status change requested
     if payload.status is not None and payload.status != task.status:
         check_transition_or_raise(current=task.status, requested=payload.status)
+
+        # Execution guard: cannot move to IN_PROGRESS or CLAIMED if prerequisites are incomplete
+        if payload.status in {TaskStatus.IN_PROGRESS.value, TaskStatus.CLAIMED.value}:
+            dep_repo = TaskDependencyRepository(session)
+            resolved, unresolved = await dep_repo.are_dependencies_resolved(task.id)
+            if not resolved:
+                raise ConflictError(
+                    code="TASK_DEPENDENCIES_UNRESOLVED",
+                    message="Cannot start task: prerequisite dependencies are not yet completed.",
+                    details={"unresolved_dependencies": unresolved},
+                )
+
         task.status = payload.status
 
     if payload.title is not None:
@@ -199,6 +216,7 @@ async def update_task(
 
     task.version += 1
     updated = await task_repo.update(task)
+
     return TaskResponse.model_validate(updated)
 
 
@@ -214,7 +232,7 @@ async def transition_task_state(
     actor: CurrentActorDep,
     session: Annotated[AsyncSession, Depends(get_db_session)],
 ) -> TaskResponse:
-    """Execute state machine transition on a task."""
+    """Execute state machine transition on a task with execution dependency guards."""
     task_repo = TaskRepository(session)
     task = await task_repo.get_by_id(task_id)
 
@@ -223,9 +241,21 @@ async def transition_task_state(
 
     check_transition_or_raise(current=task.status, requested=payload.status)
 
+    # Execution dependency guard
+    if payload.status in {TaskStatus.IN_PROGRESS.value, TaskStatus.CLAIMED.value}:
+        dep_repo = TaskDependencyRepository(session)
+        resolved, unresolved = await dep_repo.are_dependencies_resolved(task.id)
+        if not resolved:
+            raise ConflictError(
+                code="TASK_DEPENDENCIES_UNRESOLVED",
+                message="Cannot execute task: prerequisite dependencies are not yet completed.",
+                details={"unresolved_dependencies": unresolved},
+            )
+
     task.status = payload.status
     task.version += 1
     updated = await task_repo.update(task)
+
     return TaskResponse.model_validate(updated)
 
 
@@ -248,4 +278,89 @@ async def delete_task(
     assert task is not None
 
     await task_repo.delete(task)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+# ─── Task Dependencies Endpoints (M14) ──────────────────────────────────────
+
+
+@router.get(
+    "/tasks/{task_id}/dependencies",
+    response_model=list[TaskResponse],
+    summary="List Task Dependencies",
+    description="Returns all prerequisite tasks that this task depends on.",
+)
+async def list_task_dependencies(
+    task_id: uuid.UUID,
+    actor: CurrentActorDep,
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+) -> list[TaskResponse]:
+    """List prerequisite tasks."""
+    task_repo = TaskRepository(session)
+    task = await task_repo.get_by_id(task_id)
+
+    authorize_object_access(actor, task, Permission.TASK_READ, resource_name="Task")
+    assert task is not None
+
+    dep_repo = TaskDependencyRepository(session)
+    prerequisites = await dep_repo.list_dependencies(task_id)
+    return [TaskResponse.model_validate(p) for p in prerequisites]
+
+
+@router.post(
+    "/tasks/{task_id}/dependencies",
+    response_model=TaskDependencyResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Add Task Dependency",
+    description="Establishes a prerequisite dependency edge preventing task DAG cycles.",
+)
+async def add_task_dependency(
+    task_id: uuid.UUID,
+    payload: TaskDependencyCreate,
+    actor: CurrentActorDep,
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+) -> TaskDependencyResponse:
+    """Add a directed prerequisite dependency edge."""
+    task_repo = TaskRepository(session)
+    task = await task_repo.get_by_id(task_id)
+
+    authorize_object_access(actor, task, Permission.TASK_UPDATE, resource_name="Task")
+    assert task is not None
+
+    # Validate prerequisite task exists and belongs to the same project
+    prerequisite_task = await task_repo.get_by_id(payload.depends_on_task_id)
+    if prerequisite_task is None or prerequisite_task.project_id != task.project_id:
+        raise NotFoundError(
+            resource="PrerequisiteTask", resource_id=str(payload.depends_on_task_id)
+        )
+
+    dep_repo = TaskDependencyRepository(session)
+    dep = await dep_repo.add_dependency(task_id, payload.depends_on_task_id)
+    return TaskDependencyResponse.model_validate(dep)
+
+
+@router.delete(
+    "/tasks/{task_id}/dependencies/{dependency_task_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Remove Task Dependency",
+    description="Removes a prerequisite dependency edge.",
+)
+async def remove_task_dependency(
+    task_id: uuid.UUID,
+    dependency_task_id: uuid.UUID,
+    actor: CurrentActorDep,
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+) -> Response:
+    """Remove a dependency edge."""
+    task_repo = TaskRepository(session)
+    task = await task_repo.get_by_id(task_id)
+
+    authorize_object_access(actor, task, Permission.TASK_UPDATE, resource_name="Task")
+    assert task is not None
+
+    dep_repo = TaskDependencyRepository(session)
+    removed = await dep_repo.remove_dependency(task_id, dependency_task_id)
+    if not removed:
+        raise NotFoundError(resource="TaskDependency", resource_id=str(dependency_task_id))
+
     return Response(status_code=status.HTTP_204_NO_CONTENT)

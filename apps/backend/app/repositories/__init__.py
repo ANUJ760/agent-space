@@ -53,6 +53,7 @@ from app.repositories.agent_repo import AgentRepository  # noqa: E402
 from app.repositories.organization_repo import OrganizationRepository  # noqa: E402
 from app.repositories.project_member_repo import ProjectMemberRepository  # noqa: E402
 from app.repositories.project_repo import ProjectRepository  # noqa: E402
+from app.repositories.task_dependency_repo import TaskDependencyRepository  # noqa: E402
 from app.repositories.task_repo import TaskRepository  # noqa: E402
 from app.repositories.user_repo import UserRepository  # noqa: E402
 
@@ -62,6 +63,7 @@ __all__ = [
     "OrganizationRepository",
     "ProjectMemberRepository",
     "ProjectRepository",
+    "TaskDependencyRepository",
     "TaskRepository",
     "UserRepository",
 ]

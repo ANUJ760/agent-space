@@ -28,6 +28,11 @@ from app.schemas.task import (
     TaskTransitionRequest,
     TaskUpdate,
 )
+from app.schemas.task_dependency import (
+    TaskDependencyCreate,
+    TaskDependencyItemResponse,
+    TaskDependencyResponse,
+)
 from app.schemas.user import UserProfileResponse, UserResponse
 
 __all__ = [
@@ -45,6 +50,9 @@ __all__ = [
     "ProjectSummaryResponse",
     "ProjectUpdate",
     "TaskCreate",
+    "TaskDependencyCreate",
+    "TaskDependencyItemResponse",
+    "TaskDependencyResponse",
     "TaskPriority",
     "TaskResponse",
     "TaskTransitionRequest",
