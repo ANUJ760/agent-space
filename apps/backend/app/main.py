@@ -20,6 +20,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.v1.router import router as v1_router
 from app.config import Settings, get_settings
+from app.database import DatabaseManager, set_db_manager
 from app.errors import register_exception_handlers
 from app.logging import setup_logging
 from app.middleware import RequestIDMiddleware
@@ -31,11 +32,11 @@ logger = structlog.stdlib.get_logger(__name__)
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Application lifecycle manager.
 
-    Startup: log configuration summary.
-    Shutdown: log graceful shutdown.
-    Future modules will add database pool, Redis, NATS, Temporal connections here.
+    Startup: configure database connection pool, log configuration summary.
+    Shutdown: dispose database pool, log graceful shutdown.
+    Future modules will add Redis, NATS, Temporal connections here.
     """
-    settings = get_settings()
+    settings = getattr(app.state, "settings", None) or get_settings()
     logger.info(
         "application_startup",
         app_name=settings.app_name,
@@ -43,7 +44,22 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         environment=settings.environment,
         debug=settings.debug,
     )
+
+    # Database lifecycle
+    db = DatabaseManager(settings.database)
+    try:
+        await db.connect()
+        set_db_manager(db)
+    except Exception:
+        logger.error("database_startup_failed")
+        # App can still start — health/ready will report degraded in M05
+        # For now we allow startup to continue so non-DB endpoints work
+
     yield
+
+    # Shutdown
+    if db._engine is not None:
+        await db.disconnect()
     logger.info("application_shutdown")
 
 
@@ -76,6 +92,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         openapi_url="/openapi.json",
         lifespan=lifespan,
     )
+    app.state.settings = settings
 
     # 3. Register middleware (order matters — outermost first)
     # CORS must be added before RequestID so preflight requests are handled
