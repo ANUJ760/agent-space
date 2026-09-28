@@ -10,6 +10,7 @@ from app.schemas.organization import (
     OrganizationResponse,
     OrganizationUpdate,
 )
+from app.schemas.outbox import OutboxEventResponse
 from app.schemas.project import (
     ProjectCreate,
     ProjectResponse,
@@ -45,6 +46,7 @@ __all__ = [
     "OrganizationCreate",
     "OrganizationResponse",
     "OrganizationUpdate",
+    "OutboxEventResponse",
     "ProjectCreate",
     "ProjectMemberCreate",
     "ProjectMemberResponse",

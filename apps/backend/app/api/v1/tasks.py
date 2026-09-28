@@ -16,10 +16,12 @@ from app.database import get_db_session
 from app.errors import ConflictError, NotFoundError
 from app.models.task import Task
 from app.repositories.agent_repo import AgentRepository
+from app.repositories.outbox_repo import OutboxRepository
 from app.repositories.project_repo import ProjectRepository
 from app.repositories.task_dependency_repo import TaskDependencyRepository
 from app.repositories.task_repo import TaskRepository
 from app.repositories.user_repo import UserRepository
+from app.schemas.outbox import OutboxEventResponse
 from app.schemas.task import (
     AssigneeType,
     TaskAssignRequest,
@@ -125,6 +127,24 @@ async def create_task(
         context=payload.context,
     )
     created = await task_repo.create(task)
+
+    outbox_repo = OutboxRepository(session)
+    await outbox_repo.record_event(
+        event_type="task.created",
+        aggregate_type="task",
+        aggregate_id=created.id,
+        payload={
+            "task_id": str(created.id),
+            "title": created.title,
+            "status": created.status,
+            "priority": created.priority,
+            "project_id": str(created.project_id),
+        },
+        organization_id=created.organization_id,
+        project_id=created.project_id,
+        actor_id=actor.id,
+    )
+
     return TaskResponse.model_validate(created)
 
 
@@ -258,6 +278,7 @@ async def transition_task_state(
                 details={"unresolved_dependencies": unresolved},
             )
 
+    previous_status = task.status
     task.status = payload.status
 
     if payload.expected_version is not None:
@@ -265,6 +286,25 @@ async def transition_task_state(
     else:
         task.version += 1
         updated = await task_repo.update(task)
+
+    outbox_repo = OutboxRepository(session)
+    event_type = (
+        "task.completed" if payload.status == TaskStatus.DONE.value else "task.transitioned"
+    )
+    await outbox_repo.record_event(
+        event_type=event_type,
+        aggregate_type="task",
+        aggregate_id=updated.id,
+        payload={
+            "task_id": str(updated.id),
+            "previous_status": previous_status,
+            "new_status": updated.status,
+            "reason": payload.reason,
+        },
+        organization_id=updated.organization_id,
+        project_id=updated.project_id,
+        actor_id=actor.id,
+    )
 
     return TaskResponse.model_validate(updated)
 
@@ -286,6 +326,17 @@ async def delete_task(
 
     authorize_object_access(actor, task, Permission.TASK_DELETE, resource_name="Task")
     assert task is not None
+
+    outbox_repo = OutboxRepository(session)
+    await outbox_repo.record_event(
+        event_type="task.deleted",
+        aggregate_type="task",
+        aggregate_id=task.id,
+        payload={"task_id": str(task.id), "title": task.title},
+        organization_id=task.organization_id,
+        project_id=task.project_id,
+        actor_id=actor.id,
+    )
 
     await task_repo.delete(task)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
@@ -353,6 +404,24 @@ async def assign_task(
         assignee_id=payload.assignee_id,
         allow_takeover=payload.allow_takeover,
     )
+
+    outbox_repo = OutboxRepository(session)
+    await outbox_repo.record_event(
+        event_type="task.assigned",
+        aggregate_type="task",
+        aggregate_id=updated.id,
+        payload={
+            "task_id": str(updated.id),
+            "assignee_type": payload.assignee_type.value,
+            "assignee_id": str(payload.assignee_id),
+            "status": updated.status,
+            "allow_takeover": payload.allow_takeover,
+        },
+        organization_id=updated.organization_id,
+        project_id=updated.project_id,
+        actor_id=actor.id,
+    )
+
     return TaskResponse.model_validate(updated)
 
 
@@ -382,6 +451,21 @@ async def release_task(
 
     task.version += 1
     updated = await task_repo.update(task)
+
+    outbox_repo = OutboxRepository(session)
+    await outbox_repo.record_event(
+        event_type="task.released",
+        aggregate_type="task",
+        aggregate_id=updated.id,
+        payload={
+            "task_id": str(updated.id),
+            "status": updated.status,
+        },
+        organization_id=updated.organization_id,
+        project_id=updated.project_id,
+        actor_id=actor.id,
+    )
+
     return TaskResponse.model_validate(updated)
 
 
@@ -468,3 +552,30 @@ async def remove_task_dependency(
         raise NotFoundError(resource="TaskDependency", resource_id=str(dependency_task_id))
 
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+# ─── Audit Outbox Endpoints (M19) ───────────────────────────────────────────
+
+
+@router.get(
+    "/projects/{project_id}/audit-events",
+    response_model=list[OutboxEventResponse],
+    summary="List Project Audit Events",
+    description="Returns recorded domain outbox events for audit tracking and compliance.",
+)
+async def list_project_audit_events(
+    project_id: uuid.UUID,
+    actor: CurrentActorDep,
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+    offset: int = 0,
+    limit: int = 100,
+) -> list[OutboxEventResponse]:
+    """Retrieve audit outbox events for a project."""
+    project_repo = ProjectRepository(session)
+    project = await project_repo.get_by_id(project_id)
+    authorize_project_access(actor, project, Permission.TASK_READ)
+    assert project is not None
+
+    outbox_repo = OutboxRepository(session)
+    events = await outbox_repo.list_by_project(project_id, offset=offset, limit=limit)
+    return [OutboxEventResponse.model_validate(e) for e in events]

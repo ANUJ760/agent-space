@@ -9,6 +9,7 @@ from app.models.agent import Agent
 from app.models.idempotency import IdempotencyRecord
 from app.models.mixins import TimestampMixin, UUIDPrimaryKeyMixin, VersionMixin
 from app.models.organization import Organization
+from app.models.outbox import OutboxEvent
 from app.models.project import Project
 from app.models.project_member import ProjectMember
 from app.models.task import Task
@@ -21,6 +22,7 @@ __all__ = [
     "Base",
     "IdempotencyRecord",
     "Organization",
+    "OutboxEvent",
     "Project",
     "ProjectMember",
     "Task",

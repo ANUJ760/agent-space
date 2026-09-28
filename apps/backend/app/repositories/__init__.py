@@ -52,6 +52,7 @@ class BaseRepository(Generic[ModelT]):
 from app.repositories.agent_repo import AgentRepository  # noqa: E402
 from app.repositories.idempotency_repo import IdempotencyRepository  # noqa: E402
 from app.repositories.organization_repo import OrganizationRepository  # noqa: E402
+from app.repositories.outbox_repo import OutboxRepository  # noqa: E402
 from app.repositories.project_member_repo import ProjectMemberRepository  # noqa: E402
 from app.repositories.project_repo import ProjectRepository  # noqa: E402
 from app.repositories.task_dependency_repo import TaskDependencyRepository  # noqa: E402
@@ -63,6 +64,7 @@ __all__ = [
     "BaseRepository",
     "IdempotencyRepository",
     "OrganizationRepository",
+    "OutboxRepository",
     "ProjectMemberRepository",
     "ProjectRepository",
     "TaskDependencyRepository",
