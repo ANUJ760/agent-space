@@ -13,6 +13,7 @@ from app.api.v1 import (
     organizations,
     project_members,
     projects,
+    tasks,
 )
 
 router = APIRouter()
@@ -32,4 +33,7 @@ router.include_router(project_members.router, prefix="/projects", tags=["project
 
 # Agent Registry
 router.include_router(agents.router, tags=["agents"])
+
+# Tasks & Lifecycle
+router.include_router(tasks.router, tags=["tasks"])
 

@@ -1,0 +1,251 @@
+"""Task API endpoints for project tasks and lifecycle transitions."""
+
+import uuid
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, Query, Response, status
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.auth.dependencies import CurrentActorDep
+from app.auth.rbac import (
+    Permission,
+    authorize_object_access,
+    authorize_project_access,
+)
+from app.database import get_db_session
+from app.errors import NotFoundError
+from app.models.task import Task
+from app.repositories.agent_repo import AgentRepository
+from app.repositories.project_repo import ProjectRepository
+from app.repositories.task_repo import TaskRepository
+from app.repositories.user_repo import UserRepository
+from app.schemas.task import (
+    TaskCreate,
+    TaskResponse,
+    TaskTransitionRequest,
+    TaskUpdate,
+)
+from app.services.task_state_machine import TaskStatus, check_transition_or_raise
+
+router = APIRouter()
+
+
+# ─── Project Tasks Endpoints ────────────────────────────────────────────────
+
+
+@router.get(
+    "/projects/{project_id}/tasks",
+    response_model=list[TaskResponse],
+    summary="List Project Tasks",
+    description="Returns all tasks within a project with optional filtering.",
+)
+async def list_project_tasks(
+    project_id: uuid.UUID,
+    actor: CurrentActorDep,
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+    offset: int = 0,
+    limit: int = 100,
+    status_filter: str | None = Query(default=None, alias="status"),
+    priority_filter: str | None = Query(default=None, alias="priority"),
+    assigned_agent_id: uuid.UUID | None = None,
+    assigned_user_id: uuid.UUID | None = None,
+) -> list[TaskResponse]:
+    """List tasks in a project."""
+    project_repo = ProjectRepository(session)
+    project = await project_repo.get_by_id(project_id)
+    authorize_project_access(actor, project, Permission.TASK_READ)
+    assert project is not None
+
+    task_repo = TaskRepository(session)
+    tasks = await task_repo.list_by_project(
+        project_id,
+        offset=offset,
+        limit=limit,
+        status=status_filter,
+        priority=priority_filter,
+        assigned_agent_id=assigned_agent_id,
+        assigned_user_id=assigned_user_id,
+    )
+    return [TaskResponse.model_validate(t) for t in tasks]
+
+
+@router.post(
+    "/projects/{project_id}/tasks",
+    response_model=TaskResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Create Task",
+    description="Creates a new task within a project.",
+)
+async def create_task(
+    project_id: uuid.UUID,
+    payload: TaskCreate,
+    actor: CurrentActorDep,
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+) -> TaskResponse:
+    """Create a new task in TODO state."""
+    project_repo = ProjectRepository(session)
+    project = await project_repo.get_by_id(project_id)
+    authorize_project_access(actor, project, Permission.TASK_CREATE)
+    assert project is not None
+
+    # Validate assigned agent if specified
+    if payload.assigned_agent_id is not None:
+        agent_repo = AgentRepository(session)
+        agent = await agent_repo.get_by_id(payload.assigned_agent_id)
+        if agent is None or agent.organization_id != project.organization_id:
+            raise NotFoundError(resource="Agent", resource_id=str(payload.assigned_agent_id))
+
+    # Validate assigned user if specified
+    if payload.assigned_user_id is not None:
+        user_repo = UserRepository(session)
+        user = await user_repo.get_by_id(payload.assigned_user_id)
+        if user is None or user.organization_id != project.organization_id:
+            raise NotFoundError(resource="User", resource_id=str(payload.assigned_user_id))
+
+    task_repo = TaskRepository(session)
+    task = Task(
+        organization_id=project.organization_id,
+        project_id=project_id,
+        title=payload.title,
+        description=payload.description,
+        status=TaskStatus.TODO.value,
+        priority=payload.priority.value
+        if hasattr(payload.priority, "value")
+        else str(payload.priority),
+        assigned_agent_id=payload.assigned_agent_id,
+        assigned_user_id=payload.assigned_user_id,
+        created_by_id=actor.id,
+        context=payload.context,
+    )
+    created = await task_repo.create(task)
+    return TaskResponse.model_validate(created)
+
+
+# ─── Individual Task Endpoints ──────────────────────────────────────────────
+
+
+@router.get(
+    "/tasks/{task_id}",
+    response_model=TaskResponse,
+    summary="Get Task",
+    description="Retrieves a task by its ID.",
+)
+async def get_task(
+    task_id: uuid.UUID,
+    actor: CurrentActorDep,
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+) -> TaskResponse:
+    """Fetch task details."""
+    task_repo = TaskRepository(session)
+    task = await task_repo.get_by_id(task_id)
+
+    authorize_object_access(actor, task, Permission.TASK_READ, resource_name="Task")
+    assert task is not None
+    return TaskResponse.model_validate(task)
+
+
+@router.patch(
+    "/tasks/{task_id}",
+    response_model=TaskResponse,
+    summary="Update Task",
+    description="Updates task properties. If status is provided, verifies state machine rules.",
+)
+async def update_task(
+    task_id: uuid.UUID,
+    payload: TaskUpdate,
+    actor: CurrentActorDep,
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+) -> TaskResponse:
+    """Update task details and/or perform state transition."""
+    task_repo = TaskRepository(session)
+    task = await task_repo.get_by_id(task_id)
+
+    authorize_object_access(actor, task, Permission.TASK_UPDATE, resource_name="Task")
+    assert task is not None
+
+    # Enforce centralized state machine if status change requested
+    if payload.status is not None and payload.status != task.status:
+        check_transition_or_raise(current=task.status, requested=payload.status)
+        task.status = payload.status
+
+    if payload.title is not None:
+        task.title = payload.title
+    if payload.description is not None:
+        task.description = payload.description
+    if payload.priority is not None:
+        task.priority = (
+            payload.priority.value if hasattr(payload.priority, "value") else str(payload.priority)
+        )
+    if payload.context is not None:
+        task.context = payload.context
+    if payload.result is not None:
+        task.result = payload.result
+    if payload.error_message is not None:
+        task.error_message = payload.error_message
+
+    if payload.assigned_agent_id is not None:
+        agent_repo = AgentRepository(session)
+        agent = await agent_repo.get_by_id(payload.assigned_agent_id)
+        if agent is None or agent.organization_id != task.organization_id:
+            raise NotFoundError(resource="Agent", resource_id=str(payload.assigned_agent_id))
+        task.assigned_agent_id = payload.assigned_agent_id
+
+    if payload.assigned_user_id is not None:
+        user_repo = UserRepository(session)
+        user = await user_repo.get_by_id(payload.assigned_user_id)
+        if user is None or user.organization_id != task.organization_id:
+            raise NotFoundError(resource="User", resource_id=str(payload.assigned_user_id))
+        task.assigned_user_id = payload.assigned_user_id
+
+    task.version += 1
+    updated = await task_repo.update(task)
+    return TaskResponse.model_validate(updated)
+
+
+@router.post(
+    "/tasks/{task_id}/transition",
+    response_model=TaskResponse,
+    summary="Transition Task State",
+    description="Explicitly transitions task status according to the state machine.",
+)
+async def transition_task_state(
+    task_id: uuid.UUID,
+    payload: TaskTransitionRequest,
+    actor: CurrentActorDep,
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+) -> TaskResponse:
+    """Execute state machine transition on a task."""
+    task_repo = TaskRepository(session)
+    task = await task_repo.get_by_id(task_id)
+
+    authorize_object_access(actor, task, Permission.TASK_UPDATE, resource_name="Task")
+    assert task is not None
+
+    check_transition_or_raise(current=task.status, requested=payload.status)
+
+    task.status = payload.status
+    task.version += 1
+    updated = await task_repo.update(task)
+    return TaskResponse.model_validate(updated)
+
+
+@router.delete(
+    "/tasks/{task_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Delete Task",
+    description="Permanently deletes a task.",
+)
+async def delete_task(
+    task_id: uuid.UUID,
+    actor: CurrentActorDep,
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+) -> Response:
+    """Delete a task."""
+    task_repo = TaskRepository(session)
+    task = await task_repo.get_by_id(task_id)
+
+    authorize_object_access(actor, task, Permission.TASK_DELETE, resource_name="Task")
+    assert task is not None
+
+    await task_repo.delete(task)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

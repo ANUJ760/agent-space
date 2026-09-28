@@ -21,6 +21,13 @@ from app.schemas.project_member import (
     ProjectMemberResponse,
     ProjectMemberUpdate,
 )
+from app.schemas.task import (
+    TaskCreate,
+    TaskPriority,
+    TaskResponse,
+    TaskTransitionRequest,
+    TaskUpdate,
+)
 from app.schemas.user import UserProfileResponse, UserResponse
 
 __all__ = [
@@ -37,6 +44,11 @@ __all__ = [
     "ProjectResponse",
     "ProjectSummaryResponse",
     "ProjectUpdate",
+    "TaskCreate",
+    "TaskPriority",
+    "TaskResponse",
+    "TaskTransitionRequest",
+    "TaskUpdate",
     "UserProfileResponse",
     "UserResponse",
 ]
