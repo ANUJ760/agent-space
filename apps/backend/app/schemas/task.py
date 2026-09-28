@@ -17,6 +17,20 @@ class TaskPriority(StrEnum):
     CRITICAL = "CRITICAL"
 
 
+class AssigneeType(StrEnum):
+    """Supported task worker assignment categories."""
+
+    HUMAN = "HUMAN"
+    AGENT = "AGENT"
+
+
+class TaskAssignRequest(BaseModel):
+    """Payload to assign a task to a user or agent."""
+
+    assignee_type: AssigneeType = Field(description="Worker type: HUMAN or AGENT")
+    assignee_id: uuid.UUID = Field(description="UUID of the User or Agent to assign")
+
+
 class TaskCreate(BaseModel):
     """Payload to create a new task within a project."""
 

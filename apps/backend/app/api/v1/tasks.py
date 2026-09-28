@@ -21,6 +21,8 @@ from app.repositories.task_dependency_repo import TaskDependencyRepository
 from app.repositories.task_repo import TaskRepository
 from app.repositories.user_repo import UserRepository
 from app.schemas.task import (
+    AssigneeType,
+    TaskAssignRequest,
     TaskCreate,
     TaskResponse,
     TaskTransitionRequest,
@@ -279,6 +281,89 @@ async def delete_task(
 
     await task_repo.delete(task)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+# ─── Task Assignment Endpoints (M15) ────────────────────────────────────────
+
+
+@router.post(
+    "/tasks/{task_id}/assign",
+    response_model=TaskResponse,
+    summary="Assign Task",
+    description="Assigns a task to a human or agent and transitions state to CLAIMED.",
+)
+async def assign_task(
+    task_id: uuid.UUID,
+    payload: TaskAssignRequest,
+    actor: CurrentActorDep,
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+) -> TaskResponse:
+    """Assign a task to a designated worker."""
+    task_repo = TaskRepository(session)
+    task = await task_repo.get_by_id(task_id)
+
+    authorize_object_access(actor, task, Permission.TASK_ASSIGN, resource_name="Task")
+    assert task is not None
+
+    if payload.assignee_type == AssigneeType.AGENT:
+        agent_repo = AgentRepository(session)
+        agent = await agent_repo.get_by_id(payload.assignee_id)
+        if agent is None or agent.organization_id != task.organization_id:
+            raise NotFoundError(resource="Agent", resource_id=str(payload.assignee_id))
+        task.assigned_agent_id = payload.assignee_id
+        task.assigned_user_id = None
+    elif payload.assignee_type == AssigneeType.HUMAN:
+        user_repo = UserRepository(session)
+        user = await user_repo.get_by_id(payload.assignee_id)
+        if user is None or user.organization_id != task.organization_id:
+            raise NotFoundError(resource="User", resource_id=str(payload.assignee_id))
+        task.assigned_user_id = payload.assignee_id
+        task.assigned_agent_id = None
+
+    # Auto-claim task if in TODO
+    if task.status == TaskStatus.TODO.value:
+        dep_repo = TaskDependencyRepository(session)
+        resolved, unresolved = await dep_repo.are_dependencies_resolved(task.id)
+        if not resolved:
+            raise ConflictError(
+                code="TASK_DEPENDENCIES_UNRESOLVED",
+                message="Cannot assign and claim task: prerequisite dependencies are not yet completed.",
+                details={"unresolved_dependencies": unresolved},
+            )
+        task.status = TaskStatus.CLAIMED.value
+
+    task.version += 1
+    updated = await task_repo.update(task)
+    return TaskResponse.model_validate(updated)
+
+
+@router.post(
+    "/tasks/{task_id}/release",
+    response_model=TaskResponse,
+    summary="Release Task",
+    description="Clears assignment and returns task to TODO state.",
+)
+async def release_task(
+    task_id: uuid.UUID,
+    actor: CurrentActorDep,
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+) -> TaskResponse:
+    """Release a claimed task back to the backlog."""
+    task_repo = TaskRepository(session)
+    task = await task_repo.get_by_id(task_id)
+
+    authorize_object_access(actor, task, Permission.TASK_ASSIGN, resource_name="Task")
+    assert task is not None
+
+    task.assigned_agent_id = None
+    task.assigned_user_id = None
+
+    if task.status == TaskStatus.CLAIMED.value:
+        task.status = TaskStatus.TODO.value
+
+    task.version += 1
+    updated = await task_repo.update(task)
+    return TaskResponse.model_validate(updated)
 
 
 # ─── Task Dependencies Endpoints (M14) ──────────────────────────────────────

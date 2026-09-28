@@ -22,6 +22,8 @@ from app.schemas.project_member import (
     ProjectMemberUpdate,
 )
 from app.schemas.task import (
+    AssigneeType,
+    TaskAssignRequest,
     TaskCreate,
     TaskPriority,
     TaskResponse,
@@ -39,6 +41,7 @@ __all__ = [
     "AgentCreate",
     "AgentResponse",
     "AgentUpdate",
+    "AssigneeType",
     "OrganizationCreate",
     "OrganizationResponse",
     "OrganizationUpdate",
@@ -49,6 +52,7 @@ __all__ = [
     "ProjectResponse",
     "ProjectSummaryResponse",
     "ProjectUpdate",
+    "TaskAssignRequest",
     "TaskCreate",
     "TaskDependencyCreate",
     "TaskDependencyItemResponse",
