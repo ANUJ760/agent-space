@@ -1,9 +1,4 @@
-"""Repository base classes for data access.
-
-Provides a generic async repository pattern that encapsulates
-SQLAlchemy session operations. Domain-specific repositories
-inherit from ``BaseRepository`` and add query methods.
-"""
+"""Repository base classes and domain repositories for data access."""
 
 import uuid
 from typing import Generic, TypeVar
@@ -17,14 +12,7 @@ ModelT = TypeVar("ModelT", bound=Base)
 
 
 class BaseRepository(Generic[ModelT]):
-    """Generic async repository for CRUD operations on a SQLAlchemy model.
-
-    Subclasses should set ``model_class`` to the target ORM model.
-
-    Usage:
-        class UserRepository(BaseRepository[User]):
-            model_class = User
-    """
+    """Generic async repository for CRUD operations on a SQLAlchemy model."""
 
     model_class: type[ModelT]
 
@@ -57,3 +45,13 @@ class BaseRepository(Generic[ModelT]):
         """Mark an entity for deletion."""
         await self._session.delete(entity)
         await self._session.flush()
+
+
+from app.repositories.organization_repo import OrganizationRepository  # noqa: E402
+from app.repositories.user_repo import UserRepository  # noqa: E402
+
+__all__ = [
+    "BaseRepository",
+    "OrganizationRepository",
+    "UserRepository",
+]
