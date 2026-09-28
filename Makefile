@@ -1,4 +1,4 @@
-.PHONY: help setup test lint format check clean dev-docker-up dev-docker-down
+.PHONY: help setup test lint format check clean dev-docker-up dev-docker-down db-migrate db-makemigrations db-downgrade db-history db-current
 
 # Default target
 help:
@@ -11,6 +11,11 @@ help:
 	@echo "  make format           Auto-format codebases (ruff, prettier)"
 	@echo "  make check            Run all verifications (lint + test)"
 	@echo "  make clean            Clean ephemeral build caches and test outputs"
+	@echo "  make db-migrate       Apply all pending database migrations"
+	@echo "  make db-makemigrations m=\"...\" Generate a new migration revision"
+	@echo "  make db-downgrade     Roll back the last applied migration"
+	@echo "  make db-history       Show database migration history"
+	@echo "  make db-current       Show current database revision"
 	@echo "  make dev-docker-up    Start backing infrastructure (Postgres, Redis, etc.)"
 	@echo "  make dev-docker-down  Stop backing infrastructure"
 	@echo "======================================================================"
@@ -51,3 +56,18 @@ dev-docker-up:
 
 dev-docker-down:
 	docker compose -f infrastructure/docker-compose.yml down
+
+db-migrate:
+	python3 -m alembic upgrade head
+
+db-makemigrations:
+	python3 -m alembic revision --autogenerate -m "$(m)"
+
+db-downgrade:
+	python3 -m alembic downgrade -1
+
+db-history:
+	python3 -m alembic history --verbose
+
+db-current:
+	python3 -m alembic current
