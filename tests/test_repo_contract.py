@@ -4,10 +4,9 @@ Verifies repository structure, tooling configs, gitignore rules,
 and environment template integrity.
 """
 
-from pathlib import Path
 import json
 import tomllib
-import pytest
+from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
