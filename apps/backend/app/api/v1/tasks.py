@@ -216,8 +216,12 @@ async def update_task(
             raise NotFoundError(resource="User", resource_id=str(payload.assigned_user_id))
         task.assigned_user_id = payload.assigned_user_id
 
-    task.version += 1
-    updated = await task_repo.update(task)
+    # Optimistic locking check if client sent expected_version
+    if payload.expected_version is not None:
+        updated = await task_repo.update_with_optimistic_lock(task, payload.expected_version)
+    else:
+        task.version += 1
+        updated = await task_repo.update(task)
 
     return TaskResponse.model_validate(updated)
 
@@ -255,8 +259,12 @@ async def transition_task_state(
             )
 
     task.status = payload.status
-    task.version += 1
-    updated = await task_repo.update(task)
+
+    if payload.expected_version is not None:
+        updated = await task_repo.update_with_optimistic_lock(task, payload.expected_version)
+    else:
+        task.version += 1
+        updated = await task_repo.update(task)
 
     return TaskResponse.model_validate(updated)
 

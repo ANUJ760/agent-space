@@ -49,6 +49,7 @@ class TaskUpdate(BaseModel):
     """Payload to update an existing task.
 
     If status is specified, it must satisfy valid state machine transitions.
+    If expected_version is specified, enforces optimistic concurrency locking.
     """
 
     title: str | None = Field(default=None, min_length=1, max_length=255)
@@ -63,6 +64,10 @@ class TaskUpdate(BaseModel):
     context: dict[str, Any] | None = None
     result: dict[str, Any] | None = None
     error_message: str | None = Field(default=None, max_length=2048)
+    expected_version: int | None = Field(
+        default=None,
+        description="Expected version for optimistic concurrency control (blocks stale updates)",
+    )
 
 
 class TaskTransitionRequest(BaseModel):
@@ -71,6 +76,10 @@ class TaskTransitionRequest(BaseModel):
     status: str = Field(description="Target TaskStatus")
     reason: str | None = Field(
         default=None, max_length=1024, description="Optional transition reason"
+    )
+    expected_version: int | None = Field(
+        default=None,
+        description="Expected version for optimistic concurrency control",
     )
 
 
