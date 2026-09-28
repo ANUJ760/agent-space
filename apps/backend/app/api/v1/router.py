@@ -6,7 +6,7 @@ under the ``/api/v1`` prefix in ``main.py``.
 
 from fastapi import APIRouter
 
-from app.api.v1 import auth, health, organizations
+from app.api.v1 import auth, health, organizations, projects
 
 router = APIRouter()
 
@@ -18,3 +18,7 @@ router.include_router(auth.router, prefix="/auth", tags=["authentication"])
 
 # Organizations & tenant management
 router.include_router(organizations.router, prefix="/organizations", tags=["organizations"])
+
+# Projects
+router.include_router(projects.router, prefix="/projects", tags=["projects"])
+

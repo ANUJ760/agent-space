@@ -30,15 +30,17 @@ class BaseRepository(Generic[ModelT]):
         return list(result.scalars().all())
 
     async def create(self, entity: ModelT) -> ModelT:
-        """Add a new entity to the session and flush to obtain generated values."""
+        """Add a new entity to the session, flush, and refresh to obtain generated values."""
         self._session.add(entity)
         await self._session.flush()
+        await self._session.refresh(entity)
         return entity
 
     async def update(self, entity: ModelT) -> ModelT:
-        """Merge an updated entity and flush."""
+        """Merge an updated entity, flush, and refresh to update timestamps."""
         merged = await self._session.merge(entity)
         await self._session.flush()
+        await self._session.refresh(merged)
         return merged
 
     async def delete(self, entity: ModelT) -> None:
@@ -48,10 +50,14 @@ class BaseRepository(Generic[ModelT]):
 
 
 from app.repositories.organization_repo import OrganizationRepository  # noqa: E402
+from app.repositories.project_member_repo import ProjectMemberRepository  # noqa: E402
+from app.repositories.project_repo import ProjectRepository  # noqa: E402
 from app.repositories.user_repo import UserRepository  # noqa: E402
 
 __all__ = [
     "BaseRepository",
     "OrganizationRepository",
+    "ProjectMemberRepository",
+    "ProjectRepository",
     "UserRepository",
 ]
