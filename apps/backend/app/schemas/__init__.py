@@ -11,6 +11,11 @@ from app.schemas.project import (
     ProjectSummaryResponse,
     ProjectUpdate,
 )
+from app.schemas.project_member import (
+    ProjectMemberCreate,
+    ProjectMemberResponse,
+    ProjectMemberUpdate,
+)
 from app.schemas.user import UserProfileResponse, UserResponse
 
 __all__ = [
@@ -18,6 +23,9 @@ __all__ = [
     "OrganizationResponse",
     "OrganizationUpdate",
     "ProjectCreate",
+    "ProjectMemberCreate",
+    "ProjectMemberResponse",
+    "ProjectMemberUpdate",
     "ProjectResponse",
     "ProjectSummaryResponse",
     "ProjectUpdate",
