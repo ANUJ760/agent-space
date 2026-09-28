@@ -306,27 +306,35 @@ async def assign_task(
     actor: CurrentActorDep,
     session: Annotated[AsyncSession, Depends(get_db_session)],
 ) -> TaskResponse:
-    """Assign a task to a designated worker."""
+    """Assign a task to a designated worker using row-level locking (SELECT FOR UPDATE)."""
     task_repo = TaskRepository(session)
-    task = await task_repo.get_by_id(task_id)
+    task = await task_repo.get_by_id_for_update(task_id)
 
     authorize_object_access(actor, task, Permission.TASK_ASSIGN, resource_name="Task")
     assert task is not None
+
+    is_already_assigned = (
+        task.assigned_agent_id is not None
+        or task.assigned_user_id is not None
+        or task.status in {TaskStatus.CLAIMED.value, TaskStatus.IN_PROGRESS.value}
+    )
+    if is_already_assigned and not payload.allow_takeover:
+        raise ConflictError(
+            code="TASK_ALREADY_ASSIGNED",
+            message="Task is already assigned to a worker or in progress.",
+            details={"task_id": str(task.id), "status": task.status},
+        )
 
     if payload.assignee_type == AssigneeType.AGENT:
         agent_repo = AgentRepository(session)
         agent = await agent_repo.get_by_id(payload.assignee_id)
         if agent is None or agent.organization_id != task.organization_id:
             raise NotFoundError(resource="Agent", resource_id=str(payload.assignee_id))
-        task.assigned_agent_id = payload.assignee_id
-        task.assigned_user_id = None
     elif payload.assignee_type == AssigneeType.HUMAN:
         user_repo = UserRepository(session)
         user = await user_repo.get_by_id(payload.assignee_id)
         if user is None or user.organization_id != task.organization_id:
             raise NotFoundError(resource="User", resource_id=str(payload.assignee_id))
-        task.assigned_user_id = payload.assignee_id
-        task.assigned_agent_id = None
 
     # Auto-claim task if in TODO
     if task.status == TaskStatus.TODO.value:
@@ -338,10 +346,13 @@ async def assign_task(
                 message="Cannot assign and claim task: prerequisite dependencies are not yet completed.",
                 details={"unresolved_dependencies": unresolved},
             )
-        task.status = TaskStatus.CLAIMED.value
 
-    task.version += 1
-    updated = await task_repo.update(task)
+    updated = await task_repo.assign_task_atomic(
+        task=task,
+        assignee_type=payload.assignee_type.value,
+        assignee_id=payload.assignee_id,
+        allow_takeover=payload.allow_takeover,
+    )
     return TaskResponse.model_validate(updated)
 
 

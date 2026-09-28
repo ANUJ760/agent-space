@@ -29,6 +29,10 @@ class TaskAssignRequest(BaseModel):
 
     assignee_type: AssigneeType = Field(description="Worker type: HUMAN or AGENT")
     assignee_id: uuid.UUID = Field(description="UUID of the User or Agent to assign")
+    allow_takeover: bool = Field(
+        default=False,
+        description="Whether to forcefully take over an already-assigned task",
+    )
 
 
 class TaskCreate(BaseModel):
