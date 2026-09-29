@@ -14,6 +14,7 @@ Mandatory security rules:
 from __future__ import annotations
 
 import asyncio
+import os
 import time
 import uuid
 from typing import Any
@@ -80,7 +81,8 @@ class DockerSandbox(Sandbox):
 
     def validate_mount(self, host_path: str, container_path: str) -> None:
         """Verify mount path does not expose Docker socket or sensitive host paths."""
-        norm_host = "/" if host_path == "/" else host_path.rstrip("/")
+        norm_host = os.path.normpath(host_path)
+        norm_host = "/" if norm_host == "/" else norm_host.rstrip("/")
         if norm_host == "/" or norm_host in FORBIDDEN_MOUNTS or any(
             norm_host == fm or norm_host.startswith(fm.rstrip("/") + "/")
             for fm in FORBIDDEN_MOUNTS
