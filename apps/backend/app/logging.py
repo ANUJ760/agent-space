@@ -6,9 +6,21 @@ Supports both JSON format (production) and human-readable format (development).
 
 import logging
 import sys
-from typing import Literal
+from typing import Any, Literal
 
 import structlog
+
+
+def redact_sensitive_data_processor(
+    logger: Any,
+    method_name: str,
+    event_dict: dict[str, Any],
+) -> dict[str, Any]:
+    """Structlog processor ensuring NO secrets or credentials leak to logs (M71)."""
+    from packages.security.secrets import SecretMasker
+
+    masker = SecretMasker()
+    return masker.mask_data(event_dict)
 
 
 def setup_logging(
@@ -26,6 +38,7 @@ def setup_logging(
         structlog.stdlib.add_logger_name,
         structlog.stdlib.add_log_level,
         structlog.processors.TimeStamper(fmt="iso"),
+        redact_sensitive_data_processor,
         structlog.processors.StackInfoRenderer(),
         structlog.processors.UnicodeDecoder(),
     ]
