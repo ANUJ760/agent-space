@@ -7,6 +7,16 @@ from agents.capabilities import (
     AgentWorkload,
     get_agent_capability_registry,
 )
+from agents.model_gateway import (
+    BaseModelProvider,
+    MockModelProvider,
+    ModelGateway,
+    ModelResponse,
+    OllamaProvider,
+    VLLMProvider,
+    get_model_gateway,
+    set_model_gateway,
+)
 from agents.protocol import (
     AgentExecutionStatus,
     AgentResult,
@@ -24,6 +34,14 @@ __all__ = [
     "AgentRole",
     "AgentWorkload",
     "BaseAgent",
+    "BaseModelProvider",
+    "MockModelProvider",
+    "ModelGateway",
+    "ModelResponse",
+    "OllamaProvider",
     "TaskContext",
+    "VLLMProvider",
     "get_agent_capability_registry",
+    "get_model_gateway",
+    "set_model_gateway",
 ]
