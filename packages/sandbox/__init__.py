@@ -1,5 +1,9 @@
 """Sandbox package for Agent Space."""
 
+from packages.sandbox.docker import (
+    DockerSandbox,
+    DockerSecurityViolationError,
+)
 from packages.sandbox.manager import (
     MockSandbox,
     Sandbox,
@@ -12,6 +16,8 @@ from packages.sandbox.policy import (
 )
 
 __all__ = [
+    "DockerSandbox",
+    "DockerSecurityViolationError",
     "MockSandbox",
     "NetworkPolicy",
     "Sandbox",
