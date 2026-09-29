@@ -37,6 +37,22 @@ class MockWorkflowHandle:
         elif signal_name == "resume":
             self.status = "RUNNING"
             self.state["status"] = "RUNNING"
+        elif signal_name == "human_input":
+            self.state["human_input"] = arg
+            if self.status == "WAITING_FOR_HUMAN":
+                self.status = "RUNNING"
+                self.state["status"] = "RUNNING"
+        elif signal_name == "approval":
+            self.state["approval"] = arg
+            if self.status == "WAITING_FOR_APPROVAL":
+                self.status = "RUNNING"
+                self.state["status"] = "RUNNING"
+        elif signal_name == "takeover":
+            self.status = "HUMAN_TAKEOVER"
+            self.state["status"] = "HUMAN_TAKEOVER"
+            self.state["taken_over_by"] = arg
+        elif signal_name == "handoff":
+            self.state["handoff"] = arg
 
     async def query(self, query_name: str, arg: Any = None) -> Any:
         if query_name == "status":
@@ -106,6 +122,9 @@ class TemporalService:
 
         if self._is_mock:
             async with self._lock:
+                existing = self._mock_workflows.get(workflow_id)
+                if existing and existing.status in ("RUNNING", "PAUSED"):
+                    raise RuntimeError(f"Workflow '{workflow_id}' is already running")
                 handle = MockWorkflowHandle(workflow_id, workflow_name, arg)
                 self._mock_workflows[workflow_id] = handle
                 logger.info(
