@@ -26,7 +26,9 @@ from app.schemas.task import (
     AssigneeType,
     TaskAssignRequest,
     TaskCreate,
+    TaskHandoffRequest,
     TaskResponse,
+    TaskTakeoverRequest,
     TaskTransitionRequest,
     TaskUpdate,
 )
@@ -579,3 +581,106 @@ async def list_project_audit_events(
     outbox_repo = OutboxRepository(session)
     events = await outbox_repo.list_by_project(project_id, offset=offset, limit=limit)
     return [OutboxEventResponse.model_validate(e) for e in events]
+
+
+# ─── Human Takeover & Handoff Endpoints (M53 / M54) ─────────────────────────
+
+
+@router.post(
+    "/tasks/{task_id}/takeover",
+    response_model=TaskResponse,
+    summary="Human Task Takeover",
+    description="Atomically takes over a task from an agent by a human user with row locking and audit logging.",
+)
+async def human_takeover(
+    task_id: uuid.UUID,
+    payload: TaskTakeoverRequest,
+    actor: CurrentActorDep,
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+) -> TaskResponse:
+    """Atomically seize control of a task currently assigned to an agent."""
+    task_repo = TaskRepository(session)
+    task = await task_repo.get_by_id(task_id)
+    authorize_object_access(actor, task, Permission.TASK_ASSIGN, resource_name="Task")
+    assert task is not None
+
+    previous_agent = task.assigned_agent_id
+
+    # Atomic row-lock takeover
+    updated = await task_repo.takeover_task_atomic(
+        task_id=task_id,
+        user_id=actor.id,
+        expected_version=payload.expected_version,
+    )
+
+    outbox_repo = OutboxRepository(session)
+    await outbox_repo.record_event(
+        event_type="task.takeover",
+        aggregate_type="task",
+        aggregate_id=updated.id,
+        payload={
+            "task_id": str(updated.id),
+            "user_id": str(actor.id),
+            "previous_agent_id": str(previous_agent) if previous_agent else None,
+            "reason": payload.reason,
+            "status": updated.status,
+            "version": updated.version,
+        },
+        organization_id=updated.organization_id,
+        project_id=updated.project_id,
+        actor_id=actor.id,
+    )
+
+    return TaskResponse.model_validate(updated)
+
+
+@router.post(
+    "/tasks/{task_id}/handoff",
+    response_model=TaskResponse,
+    summary="Human to Agent Handoff",
+    description="Atomically hands off a task from the human assignee back to an agent with instructions.",
+)
+async def human_handoff(
+    task_id: uuid.UUID,
+    payload: TaskHandoffRequest,
+    actor: CurrentActorDep,
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+) -> TaskResponse:
+    """Hand off task ownership from the human user back to an agent."""
+    task_repo = TaskRepository(session)
+    task = await task_repo.get_by_id(task_id)
+    authorize_object_access(actor, task, Permission.TASK_ASSIGN, resource_name="Task")
+    assert task is not None
+
+    agent_repo = AgentRepository(session)
+    agent = await agent_repo.get_by_id(payload.agent_id)
+    if not agent:
+        raise NotFoundError(resource="Agent", resource_id=str(payload.agent_id))
+
+    updated = await task_repo.handoff_task_atomic(
+        task_id=task_id,
+        user_id=actor.id,
+        agent_id=payload.agent_id,
+        instructions=payload.instructions,
+    )
+
+    outbox_repo = OutboxRepository(session)
+    await outbox_repo.record_event(
+        event_type="task.handoff",
+        aggregate_type="task",
+        aggregate_id=updated.id,
+        payload={
+            "task_id": str(updated.id),
+            "user_id": str(actor.id),
+            "agent_id": str(payload.agent_id),
+            "instructions": payload.instructions,
+            "status": updated.status,
+            "version": updated.version,
+        },
+        organization_id=updated.organization_id,
+        project_id=updated.project_id,
+        actor_id=actor.id,
+    )
+
+    return TaskResponse.model_validate(updated)
+

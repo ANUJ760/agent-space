@@ -147,3 +147,74 @@ class TaskRepository(BaseRepository[Task]):
         await self._session.flush()
         await self._session.refresh(task)
         return task
+
+    async def takeover_task_atomic(
+        self,
+        task_id: uuid.UUID,
+        user_id: uuid.UUID,
+        expected_version: int | None = None,
+    ) -> Task:
+        """Atomically take over a task from an agent by a human user.
+
+        Ensures race-free concurrency:
+        If two users attempt takeover simultaneously, exactly one succeeds and the other receives ConflictError.
+        """
+        task = await self.get_by_id_for_update(task_id)
+        if not task:
+            from app.errors import NotFoundError
+            raise NotFoundError(code="TASK_NOT_FOUND", message=f"Task {task_id} not found")
+
+        if expected_version is not None and task.version != expected_version:
+            raise ConflictError(
+                code="TAKEOVER_CONFLICT",
+                message=f"Task version conflict during takeover: expected {expected_version}, got {task.version}",
+                details={"task_id": str(task_id), "version": task.version},
+            )
+
+        if task.assigned_user_id is not None and task.assigned_user_id != user_id:
+            raise ConflictError(
+                code="TAKEOVER_CONFLICT",
+                message=f"Task is already taken over by user {task.assigned_user_id}",
+                details={"task_id": str(task_id), "current_owner": str(task.assigned_user_id)},
+            )
+
+        task.assigned_user_id = user_id
+        task.assigned_agent_id = None
+        task.status = "IN_PROGRESS"
+        task.version += 1
+        await self._session.flush()
+        await self._session.refresh(task)
+        return task
+
+    async def handoff_task_atomic(
+        self,
+        task_id: uuid.UUID,
+        user_id: uuid.UUID,
+        agent_id: uuid.UUID,
+        instructions: str | None = None,
+    ) -> Task:
+        """Atomically hand off a task from a human user back to an agent."""
+        task = await self.get_by_id_for_update(task_id)
+        if not task:
+            from app.errors import NotFoundError
+            raise NotFoundError(code="TASK_NOT_FOUND", message=f"Task {task_id} not found")
+
+        if task.assigned_user_id != user_id:
+            raise ConflictError(
+                code="HANDOFF_UNAUTHORIZED",
+                message="Cannot hand off task: caller is not the currently assigned user",
+                details={"task_id": str(task_id)},
+            )
+
+        task.assigned_user_id = None
+        task.assigned_agent_id = agent_id
+        task.status = "CLAIMED"
+        if instructions:
+            ctx = dict(task.context or {})
+            ctx["handoff_instructions"] = instructions
+            task.context = ctx
+        task.version += 1
+        await self._session.flush()
+        await self._session.refresh(task)
+        return task
+

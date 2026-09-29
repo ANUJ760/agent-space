@@ -87,6 +87,21 @@ class TaskTransitionRequest(BaseModel):
     )
 
 
+class TaskTakeoverRequest(BaseModel):
+    """Payload for human takeover of a task from an agent."""
+
+    reason: str | None = Field(default=None, max_length=1024, description="Reason for takeover")
+    expected_version: int | None = Field(default=None, description="Optional expected version for optimistic CAS")
+
+
+class TaskHandoffRequest(BaseModel):
+    """Payload to hand off task from human to an agent."""
+
+    agent_id: uuid.UUID = Field(description="UUID of the agent to resume task")
+    instructions: str | None = Field(default=None, max_length=4096, description="Specific instructions for agent")
+    expected_version: int | None = Field(default=None, description="Optional expected version for optimistic CAS")
+
+
 class TaskResponse(BaseModel):
     """Serialized Task representation."""
 
