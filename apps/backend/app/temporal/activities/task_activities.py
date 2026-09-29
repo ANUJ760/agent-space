@@ -138,3 +138,34 @@ async def finish_task_activity(task_id_str: str) -> dict[str, Any]:
             "status": task.status,
             "version": task.version,
         }
+
+
+@activity.defn
+async def handle_task_failure_activity(payload: dict[str, Any]) -> dict[str, Any]:
+    """Activity 6: Record failure state in database when workflow or worker fails."""
+    task_id = uuid.UUID(payload["task_id"])
+    error_message = payload.get("error_message", "Unknown error")
+    reset_to_todo = payload.get("reset_to_todo", False)
+
+    db_mgr = get_db_manager()
+    async with db_mgr.session_factory() as session:
+        repo = TaskRepository(session)
+        task = await repo.get_by_id(task_id)
+        if not task:
+            return {"status": "TASK_NOT_FOUND"}
+
+        task.error_message = error_message
+        if reset_to_todo:
+            task.status = "TODO"
+            task.assigned_agent_id = None
+        else:
+            task.status = "BLOCKED"
+        task.version += 1
+        await session.commit()
+
+        return {
+            "id": str(task.id),
+            "status": task.status,
+            "version": task.version,
+            "error_message": task.error_message,
+        }
