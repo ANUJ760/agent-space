@@ -10,6 +10,10 @@ from packages.sandbox.manager import (
     SandboxExecutionResult,
     SandboxManager,
 )
+from packages.sandbox.network import (
+    NetworkEgressBlockedError,
+    validate_egress_target,
+)
 from packages.sandbox.policy import (
     NetworkPolicy,
     SandboxPolicy,
@@ -19,9 +23,11 @@ __all__ = [
     "DockerSandbox",
     "DockerSecurityViolationError",
     "MockSandbox",
+    "NetworkEgressBlockedError",
     "NetworkPolicy",
     "Sandbox",
     "SandboxExecutionResult",
     "SandboxManager",
     "SandboxPolicy",
+    "validate_egress_target",
 ]
