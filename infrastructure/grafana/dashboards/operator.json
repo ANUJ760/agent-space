@@ -1,0 +1,124 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "id": null,
+  "links": [],
+  "liveNow": false,
+  "panels": [
+    {
+      "id": 1,
+      "title": "System Health",
+      "type": "stat",
+      "gridPos": { "h": 6, "w": 8, "x": 0, "y": 0 },
+      "targets": [
+        {
+          "expr": "up{job=\"agentspace-backend\"} or vector(1)",
+          "legendFormat": "Health"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Active Workflows",
+      "type": "stat",
+      "gridPos": { "h": 6, "w": 8, "x": 8, "y": 0 },
+      "targets": [
+        {
+          "expr": "sum(workflow_started_total) - sum(workflow_failed_total) or vector(0)",
+          "legendFormat": "In Flight"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Agent Health & Availability",
+      "type": "gauge",
+      "gridPos": { "h": 6, "w": 8, "x": 16, "y": 0 },
+      "targets": [
+        {
+          "expr": "sum(agent_execution_total{status=\"SUCCESS\"}) / (sum(agent_execution_total) or vector(1)) * 100",
+          "legendFormat": "Success Rate %"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Queue Depth",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 6 },
+      "targets": [
+        {
+          "expr": "queue_depth",
+          "legendFormat": "{{queue_name}}"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "Failed Tasks Rate",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 6 },
+      "targets": [
+        {
+          "expr": "sum(rate(task_failed_total[1m])) by (reason)",
+          "legendFormat": "Failures ({{reason}})"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "title": "Sandbox Failures",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 14 },
+      "targets": [
+        {
+          "expr": "sum(rate(tool_calls_total{status=\"FAILED\"}[1m])) or vector(0)",
+          "legendFormat": "Sandbox / Tool Failures"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "title": "API Errors",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 14 },
+      "targets": [
+        {
+          "expr": "sum(rate(api_errors_total[1m])) by (error_code)",
+          "legendFormat": "HTTP {{error_code}}"
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "title": "Model Latency (p95)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 14 },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(model_latency_bucket[5m])) by (le, model))",
+          "legendFormat": "{{model}} (p95)"
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "title": "Database Health",
+      "type": "stat",
+      "gridPos": { "h": 6, "w": 24, "x": 0, "y": 22 },
+      "targets": [
+        {
+          "expr": "database_pool_in_use or vector(1)",
+          "legendFormat": "PostgreSQL Active"
+        }
+      ]
+    }
+  ],
+  "schemaVersion": 39,
+  "tags": ["agentspace", "operator"],
+  "title": "Agent Space — Single Operator Dashboard",
+  "uid": "agentspace-operator",
+  "version": 1
+}

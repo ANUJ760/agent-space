@@ -10,6 +10,7 @@ from app.api.v1 import (
     agents,
     auth,
     health,
+    operator,
     organizations,
     project_members,
     projects,
@@ -40,3 +41,6 @@ router.include_router(tasks.router, tags=["tasks"])
 
 # Realtime WebSocket Gateway
 router.include_router(ws.router, tags=["realtime"])
+
+# Operator Telemetry Dashboard
+router.include_router(operator.router, tags=["operator"])
