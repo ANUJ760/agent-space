@@ -21,6 +21,10 @@ from app.repositories.project_repo import ProjectRepository
 from app.repositories.task_dependency_repo import TaskDependencyRepository
 from app.repositories.task_repo import TaskRepository
 from app.repositories.user_repo import UserRepository
+from app.schemas.agent_request import (
+    AgentHumanRequestCreate,
+    HumanResponsePayload,
+)
 from app.schemas.outbox import OutboxEventResponse
 from app.schemas.task import (
     AssigneeType,
@@ -684,3 +688,137 @@ async def human_handoff(
 
     return TaskResponse.model_validate(updated)
 
+
+# ─── Agent -> Human Requests & Responses (M55) ─────────────────────────────
+
+
+@router.post(
+    "/tasks/{task_id}/requests",
+    response_model=TaskResponse,
+    summary="Agent Request to Human",
+    description="Allows an agent to pause workflow and durably request APPROVAL, DECISION, HELP, or TAKEOVER.",
+)
+async def create_agent_human_request(
+    task_id: uuid.UUID,
+    payload: AgentHumanRequestCreate,
+    actor: CurrentActorDep,
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+) -> TaskResponse:
+    """Create a durable agent-to-human request, pausing task execution."""
+    task_repo = TaskRepository(session)
+    task = await task_repo.get_by_id(task_id)
+    authorize_object_access(actor, task, Permission.TASK_UPDATE, resource_name="Task")
+    assert task is not None
+
+    req_id = str(uuid.uuid4())
+    req_data = {
+        "id": req_id,
+        "request_type": payload.request_type.value,
+        "prompt": payload.prompt,
+        "options": payload.options,
+        "context": payload.context,
+        "status": "PENDING",
+    }
+
+    from sqlalchemy.orm.attributes import flag_modified
+
+    new_ctx = {
+        **dict(task.context or {}),
+        "pending_human_request": req_data,
+    }
+    task.context = new_ctx
+    task.status = "BLOCKED"
+    task.version += 1
+    flag_modified(task, "context")
+
+    updated = await task_repo.update(task)
+
+    outbox_repo = OutboxRepository(session)
+    await outbox_repo.record_event(
+        event_type="human.input_required",
+        aggregate_type="task",
+        aggregate_id=updated.id,
+        payload={
+            "task_id": str(updated.id),
+            "request_id": req_id,
+            "request_type": payload.request_type.value,
+            "prompt": payload.prompt,
+            "options": payload.options,
+        },
+        organization_id=updated.organization_id,
+        project_id=updated.project_id,
+        actor_id=actor.id,
+    )
+
+    return TaskResponse.model_validate(updated)
+
+
+@router.post(
+    "/tasks/{task_id}/requests/respond",
+    response_model=TaskResponse,
+    summary="Human Response to Agent Request",
+    description="Resolves a pending human request and resumes the paused task workflow.",
+)
+async def respond_to_agent_request(
+    task_id: uuid.UUID,
+    payload: HumanResponsePayload,
+    actor: CurrentActorDep,
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+) -> TaskResponse:
+    """Provide a response to a pending agent request, resuming task execution."""
+    task_repo = TaskRepository(session)
+    task = await task_repo.get_by_id(task_id)
+    authorize_object_access(actor, task, Permission.TASK_UPDATE, resource_name="Task")
+    assert task is not None
+
+    ctx = dict(task.context or {})
+    pending = ctx.get("pending_human_request")
+    if not pending or pending.get("status") != "PENDING":
+        raise ConflictError(
+            code="NO_PENDING_REQUEST",
+            message="Task has no pending agent requests awaiting human response.",
+            details={"task_id": str(task_id)},
+        )
+
+    resolved_pending = {
+        **pending,
+        "status": "RESOLVED",
+        "response": {
+            "action": payload.action,
+            "feedback": payload.feedback,
+            "selected_option": payload.selected_option,
+            "responder_user_id": str(actor.id),
+        },
+    }
+    new_ctx = {
+        **ctx,
+        "pending_human_request": resolved_pending,
+    }
+    task.context = new_ctx
+    task.status = "IN_PROGRESS"
+    task.version += 1
+
+    from sqlalchemy.orm.attributes import flag_modified
+    flag_modified(task, "context")
+
+    updated = await task_repo.update(task)
+
+    outbox_repo = OutboxRepository(session)
+    await outbox_repo.record_event(
+        event_type="workflow.updated",
+        aggregate_type="task",
+        aggregate_id=updated.id,
+        payload={
+            "task_id": str(updated.id),
+            "action": "human_response",
+            "request_type": resolved_pending.get("request_type"),
+            "response": resolved_pending["response"],
+            "status": updated.status,
+            "version": updated.version,
+        },
+        organization_id=updated.organization_id,
+        project_id=updated.project_id,
+        actor_id=actor.id,
+    )
+
+    return TaskResponse.model_validate(updated)
