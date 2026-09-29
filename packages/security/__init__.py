@@ -5,6 +5,14 @@ from packages.security.prompt_isolation import (
     PromptContext,
     PromptInjectionAttemptError,
 )
+from packages.security.secrets import (
+    AWSSecretsManager,
+    AzureKeyVaultManager,
+    EnvSecretManager,
+    SecretManager,
+    SecretMasker,
+    create_secret_manager,
+)
 from packages.security.uploads import (
     DisallowedFileTypeError,
     FileUploadSecurityError,
@@ -16,7 +24,10 @@ from packages.security.uploads import (
 )
 
 __all__ = [
+    "AWSSecretsManager",
+    "AzureKeyVaultManager",
     "DisallowedFileTypeError",
+    "EnvSecretManager",
     "FileUploadSecurityError",
     "MagicBytesMismatchError",
     "MalwareDetectedError",
@@ -25,5 +36,8 @@ __all__ = [
     "PromptBoundaryGuard",
     "PromptContext",
     "PromptInjectionAttemptError",
+    "SecretManager",
+    "SecretMasker",
     "UploadSecurityValidator",
+    "create_secret_manager",
 ]
