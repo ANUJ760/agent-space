@@ -14,6 +14,7 @@ from app.api.v1 import (
     project_members,
     projects,
     tasks,
+    ws,
 )
 
 router = APIRouter()
@@ -36,3 +37,6 @@ router.include_router(agents.router, tags=["agents"])
 
 # Tasks & Lifecycle
 router.include_router(tasks.router, tags=["tasks"])
+
+# Realtime WebSocket Gateway
+router.include_router(ws.router, tags=["realtime"])
