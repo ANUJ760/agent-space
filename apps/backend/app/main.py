@@ -23,7 +23,13 @@ from app.config import Settings, get_settings
 from app.database import DatabaseManager, set_db_manager
 from app.errors import register_exception_handlers
 from app.logging import setup_logging
-from app.middleware import IdempotencyMiddleware, RequestIDMiddleware
+from app.middleware import (
+    IdempotencyMiddleware,
+    RateLimitMiddleware,
+    RequestIDMiddleware,
+    RequestSizeLimitMiddleware,
+    SecurityHeadersMiddleware,
+)
 
 logger = structlog.stdlib.get_logger(__name__)
 
@@ -104,6 +110,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         allow_headers=["*"],
         expose_headers=["X-Request-ID", "Idempotent-Replayed", "Idempotency-Key"],
     )
+    app.add_middleware(SecurityHeadersMiddleware)
+    app.add_middleware(RequestSizeLimitMiddleware)
+    app.add_middleware(RateLimitMiddleware)
     app.add_middleware(RequestIDMiddleware)
     app.add_middleware(IdempotencyMiddleware)
 

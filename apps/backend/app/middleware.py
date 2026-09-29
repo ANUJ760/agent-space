@@ -251,3 +251,85 @@ class IdempotencyMiddleware(BaseHTTPMiddleware):
             except Exception:
                 pass
             raise
+
+
+# ─── M62 API Security Hardening Middleware ─────────────────────────────────
+
+
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    """Injects enterprise security headers into every HTTP response."""
+
+    async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
+        response = await call_next(request)
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["X-XSS-Protection"] = "1; mode=block"
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+        response.headers["Content-Security-Policy"] = (
+            "default-src 'self'; frame-ancestors 'none'; object-src 'none'"
+        )
+        response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+        return response
+
+
+class RequestSizeLimitMiddleware(BaseHTTPMiddleware):
+    """Rejects incoming requests exceeding max allowed payload size."""
+
+    def __init__(self, app: ASGIApp, max_content_length: int = 10 * 1024 * 1024) -> None:
+        super().__init__(app)
+        self.max_content_length = max_content_length
+
+    async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
+        content_length = request.headers.get("content-length")
+        if content_length:
+            try:
+                if int(content_length) > self.max_content_length:
+                    return JSONResponse(
+                        status_code=413,
+                        content={
+                            "code": "REQUEST_TOO_LARGE",
+                            "message": f"Payload size exceeds maximum allowed limit of {self.max_content_length} bytes.",
+                        },
+                    )
+            except ValueError:
+                pass
+        return await call_next(request)
+
+
+class RateLimitMiddleware(BaseHTTPMiddleware):
+    """Sliding-window IP rate limiter to protect endpoints against DoS and brute-force."""
+
+    def __init__(self, app: ASGIApp, max_requests: int = 1000, window_seconds: int = 60) -> None:
+        super().__init__(app)
+        self.max_requests = max_requests
+        self.window_seconds = window_seconds
+        self._history: dict[str, list[float]] = {}
+        self._lock = asyncio.Lock()
+
+    async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
+        # Exclude health probes
+        if request.url.path.startswith(("/health", "/ready", "/live", "/metrics")):
+            return await call_next(request)
+
+        client_ip = request.client.host if request.client else "127.0.0.1"
+        now = time.monotonic()
+
+        async with self._lock:
+            history = self._history.setdefault(client_ip, [])
+            cutoff = now - self.window_seconds
+            history[:] = [t for t in history if t > cutoff]
+
+            if len(history) >= self.max_requests:
+                return JSONResponse(
+                    status_code=429,
+                    headers={"Retry-After": str(self.window_seconds)},
+                    content={
+                        "code": "RATE_LIMIT_EXCEEDED",
+                        "message": "Too many requests. Please slow down.",
+                    },
+                )
+            history.append(now)
+
+        return await call_next(request)
+
