@@ -65,6 +65,23 @@ async def _check_database() -> DependencyCheck:
         return DependencyCheck(status="down", error="Database connection failed")
 
 
+async def _check_redis() -> DependencyCheck:
+    """Probe Redis connectivity and return status with latency."""
+    try:
+        from app.redis import get_redis_client
+
+        client = get_redis_client()
+        res = await client.health_check()
+        return DependencyCheck(
+            status=res["status"],
+            latency_ms=res.get("latency_ms"),
+            error=res.get("error"),
+        )
+    except Exception as exc:
+        logger.warning("redis_health_check_failed", error_type=type(exc).__name__)
+        return DependencyCheck(status="down", error="Redis connection failed")
+
+
 @router.get(
     "/live",
     response_model=LivenessResponse,
@@ -92,17 +109,19 @@ async def liveness() -> LivenessResponse:
         },
     },
     summary="Readiness Probe",
-    description="Probes backing services (PostgreSQL) and returns HTTP 200 if ready or 503 if degraded.",
+    description="Probes backing services (PostgreSQL, Redis) and returns HTTP 200 if ready or 503 if degraded.",
 )
 async def readiness(response: Response) -> ReadinessResponse:
     """Readiness probe — verifies all critical dependencies are usable."""
     db_check = await _check_database()
+    redis_check = await _check_redis()
     checks: dict[str, DependencyCheck] = {
         "database": db_check,
+        "redis": redis_check,
     }
 
-    # If any critical check is down, overall status is not_ready
-    is_ready = all(check.status == "up" for check in checks.values())
+    # Database is strictly authoritative; Redis is degraded if down
+    is_ready = db_check.status == "up"
     overall_status: Literal["ready", "not_ready"] = "ready" if is_ready else "not_ready"
 
     if not is_ready:
