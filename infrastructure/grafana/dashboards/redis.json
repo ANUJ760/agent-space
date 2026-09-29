@@ -1,0 +1,40 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "id": null,
+  "links": [],
+  "liveNow": false,
+  "panels": [
+    {
+      "id": 1,
+      "title": "Redis Memory Used",
+      "type": "gauge",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "targets": [
+        {
+          "expr": "redis_memory_used_bytes or vector(0)",
+          "legendFormat": "Used Bytes"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Redis Connected Clients",
+      "type": "stat",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "targets": [
+        {
+          "expr": "redis_connected_clients or vector(0)",
+          "legendFormat": "Connected Clients"
+        }
+      ]
+    }
+  ],
+  "schemaVersion": 39,
+  "tags": ["agentspace", "redis"],
+  "title": "Agent Space — Redis Cache Dashboard",
+  "uid": "agentspace-redis",
+  "version": 1
+}

@@ -1,0 +1,40 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "id": null,
+  "links": [],
+  "liveNow": false,
+  "panels": [
+    {
+      "id": 1,
+      "title": "Model Inference Latency (p95)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(model_latency_bucket[5m])) by (le, model, provider))",
+          "legendFormat": "{{model}} ({{provider}})"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Model Call Rate",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "targets": [
+        {
+          "expr": "sum(rate(model_latency_count[1m])) by (model, provider)",
+          "legendFormat": "{{model}} calls/s"
+        }
+      ]
+    }
+  ],
+  "schemaVersion": 39,
+  "tags": ["agentspace", "models"],
+  "title": "Agent Space — Foundation Models Dashboard",
+  "uid": "agentspace-models",
+  "version": 1
+}

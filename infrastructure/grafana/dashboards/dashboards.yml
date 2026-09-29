@@ -1,0 +1,11 @@
+apiVersion: 1
+
+providers:
+  - name: "AgentSpace Dashboards"
+    orgId: 1
+    folder: "Agent Space"
+    type: file
+    disableDeletion: false
+    editable: true
+    options:
+      path: /etc/grafana/provisioning/dashboards

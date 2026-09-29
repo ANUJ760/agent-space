@@ -1,0 +1,64 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "id": null,
+  "links": [],
+  "liveNow": false,
+  "panels": [
+    {
+      "id": 1,
+      "title": "API Request Rate (req/s)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "targets": [
+        {
+          "expr": "sum(rate(api_requests_total[1m])) by (method, status)",
+          "legendFormat": "{{method}} - {{status}}"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "API Latency (p95)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(api_latency_bucket[5m])) by (le, path))",
+          "legendFormat": "{{path}} (p95)"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "API Errors Total",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "targets": [
+        {
+          "expr": "sum(rate(api_errors_total[1m])) by (error_code, error_type)",
+          "legendFormat": "{{error_code}} ({{error_type}})"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Active WebSocket Connections",
+      "type": "stat",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "targets": [
+        {
+          "expr": "websocket_connections",
+          "legendFormat": "Active Sockets"
+        }
+      ]
+    }
+  ],
+  "schemaVersion": 39,
+  "tags": ["agentspace", "api"],
+  "title": "Agent Space — API Dashboard",
+  "uid": "agentspace-api",
+  "version": 1
+}

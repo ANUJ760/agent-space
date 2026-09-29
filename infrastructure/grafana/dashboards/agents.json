@@ -1,0 +1,68 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "id": null,
+  "links": [],
+  "liveNow": false,
+  "panels": [
+    {
+      "id": 1,
+      "title": "Agent Execution Throughput",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "targets": [
+        {
+          "expr": "sum(rate(agent_execution_total[1m])) by (agent_role, status)",
+          "legendFormat": "{{agent_role}} - {{status}}"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Agent Execution Duration (p95)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(agent_execution_duration_bucket[5m])) by (le, agent_role))",
+          "legendFormat": "{{agent_role}} (p95)"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Task State Transitions",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "targets": [
+        {
+          "expr": "sum(rate(task_completed_total[1m]))",
+          "legendFormat": "Tasks Completed"
+        },
+        {
+          "expr": "sum(rate(task_failed_total[1m]))",
+          "legendFormat": "Tasks Failed"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Task Concurrency Conflicts",
+      "type": "stat",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "targets": [
+        {
+          "expr": "sum(increase(task_conflict_total[1h]))",
+          "legendFormat": "Conflicts (1h)"
+        }
+      ]
+    }
+  ],
+  "schemaVersion": 39,
+  "tags": ["agentspace", "agents"],
+  "title": "Agent Space — Agents & Tasks Dashboard",
+  "uid": "agentspace-agents",
+  "version": 1
+}

@@ -1,0 +1,40 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "id": null,
+  "links": [],
+  "liveNow": false,
+  "panels": [
+    {
+      "id": 1,
+      "title": "Tool Invocations Rate",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "targets": [
+        {
+          "expr": "sum(rate(tool_calls_total[1m])) by (tool_name, status)",
+          "legendFormat": "{{tool_name}} ({{status}})"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Sandbox Container Execution Duration (p95)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(sandbox_execution_duration_bucket[5m])) by (le, sandbox_type))",
+          "legendFormat": "{{sandbox_type}} (p95)"
+        }
+      ]
+    }
+  ],
+  "schemaVersion": 39,
+  "tags": ["agentspace", "sandbox"],
+  "title": "Agent Space — Tool Gateway & Sandbox Dashboard",
+  "uid": "agentspace-sandbox",
+  "version": 1
+}

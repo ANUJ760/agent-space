@@ -1,0 +1,40 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "id": null,
+  "links": [],
+  "liveNow": false,
+  "panels": [
+    {
+      "id": 1,
+      "title": "Temporal Workflows Started",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "targets": [
+        {
+          "expr": "sum(rate(workflow_started_total[1m])) by (workflow_type)",
+          "legendFormat": "{{workflow_type}} Started"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Temporal Workflows Failed",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "targets": [
+        {
+          "expr": "sum(rate(workflow_failed_total[1m])) by (workflow_type)",
+          "legendFormat": "{{workflow_type}} Failed"
+        }
+      ]
+    }
+  ],
+  "schemaVersion": 39,
+  "tags": ["agentspace", "temporal"],
+  "title": "Agent Space — Temporal Workflows Dashboard",
+  "uid": "agentspace-temporal",
+  "version": 1
+}
