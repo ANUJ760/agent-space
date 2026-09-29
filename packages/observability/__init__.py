@@ -1,5 +1,10 @@
 """Observability, OpenTelemetry distributed tracing, and metrics package."""
 
+from packages.observability.metrics import (
+    MetricsRegistry,
+    create_metrics_router,
+    get_metrics,
+)
 from packages.observability.tracing import (
     CORRELATION_KEYS,
     STAGE_AGENT,
@@ -30,9 +35,12 @@ __all__ = [
     "STAGE_SERVICE",
     "STAGE_TOOL",
     "STAGE_WORKFLOW",
+    "MetricsRegistry",
     "TelemetryManager",
     "TraceCorrelationContext",
     "async_trace_span",
+    "create_metrics_router",
+    "get_metrics",
     "get_telemetry_manager",
     "get_trace_correlation",
     "set_trace_correlation",

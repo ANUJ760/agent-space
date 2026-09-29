@@ -44,11 +44,17 @@ class RequestIDMiddleware(BaseHTTPMiddleware):
         structlog.contextvars.clear_contextvars()
         structlog.contextvars.bind_contextvars(request_id=request_id)
 
+        # Propagate OpenTelemetry trace correlation context
+        from packages.observability import TraceCorrelationContext, set_trace_correlation
+
+        set_trace_correlation(TraceCorrelationContext(request_id=request_id))
+
         start_time = time.monotonic()
 
         response = await call_next(request)
 
-        duration_ms = round((time.monotonic() - start_time) * 1000, 2)
+        duration_s = time.monotonic() - start_time
+        duration_ms = round(duration_s * 1000, 2)
         response.headers["X-Request-ID"] = request_id
 
         logger.info(
@@ -58,6 +64,26 @@ class RequestIDMiddleware(BaseHTTPMiddleware):
             status_code=response.status_code,
             duration_ms=duration_ms,
         )
+
+        # Record Prometheus API metrics
+        if not request.url.path.startswith("/metrics"):
+            from packages.observability import get_metrics
+
+            metrics = get_metrics()
+            metrics.api_requests_total.labels(
+                method=request.method,
+                path=request.url.path,
+                status=str(response.status_code),
+            ).inc()
+            metrics.api_latency.labels(
+                method=request.method,
+                path=request.url.path,
+            ).observe(duration_s)
+            if response.status_code >= 400:
+                metrics.api_errors_total.labels(
+                    error_code=str(response.status_code),
+                    error_type="client_error" if response.status_code < 500 else "server_error",
+                ).inc()
 
         return response
 

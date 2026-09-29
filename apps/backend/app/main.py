@@ -122,6 +122,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # 5. Mount API v1 router
     app.include_router(v1_router, prefix=settings.api_v1_prefix)
 
+    # 6. Mount Prometheus metrics scraping endpoint
+    if settings.prometheus_metrics_enabled:
+        from packages.observability import create_metrics_router
+
+        app.include_router(create_metrics_router())
+
     return app
 
 
