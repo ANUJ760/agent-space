@@ -246,3 +246,24 @@ class GiteaClient:
             scopes=chosen_scopes,
             clone_url=clone_url,
         )
+
+    async def merge_branch(
+        self,
+        owner: str,
+        repo_name: str,
+        base: str,
+        head: str,
+        message: str = "Merge branch",
+    ) -> dict[str, Any]:
+        """Merge head branch into base branch.
+
+        Raises GiteaConflictError on merge conflict.
+        """
+        payload = {
+            "base": base,
+            "head": head,
+            "message": message,
+        }
+        resp = await self._request("POST", f"/repos/{owner}/{repo_name}/merges", json_data=payload)
+        return resp.json()
+
