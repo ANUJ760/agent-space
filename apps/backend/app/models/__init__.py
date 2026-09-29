@@ -6,6 +6,7 @@ Import models here so Alembic and ``Base.metadata`` can discover them.
 
 from app.database import Base
 from app.models.agent import Agent
+from app.models.artifact import Artifact
 from app.models.idempotency import IdempotencyRecord
 from app.models.mixins import TimestampMixin, UUIDPrimaryKeyMixin, VersionMixin
 from app.models.organization import Organization
@@ -19,6 +20,7 @@ from app.models.user import User
 
 __all__ = [
     "Agent",
+    "Artifact",
     "Base",
     "IdempotencyRecord",
     "Organization",
