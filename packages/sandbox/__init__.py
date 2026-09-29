@@ -18,6 +18,11 @@ from packages.sandbox.policy import (
     NetworkPolicy,
     SandboxPolicy,
 )
+from packages.sandbox.resources import (
+    ResourceGovernor,
+    ResourceLimitExceededError,
+    ResourceLimits,
+)
 
 __all__ = [
     "DockerSandbox",
@@ -25,6 +30,9 @@ __all__ = [
     "MockSandbox",
     "NetworkEgressBlockedError",
     "NetworkPolicy",
+    "ResourceGovernor",
+    "ResourceLimitExceededError",
+    "ResourceLimits",
     "Sandbox",
     "SandboxExecutionResult",
     "SandboxManager",
