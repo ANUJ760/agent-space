@@ -30,25 +30,25 @@ flowchart TD
         WSClient["WebSocket Real-Time Feed"]
     end
 
-    subgraph APILayer["API & Security Gateway (Port 8000)"]
+    subgraph APILayer["API and Security Gateway (Port 8000)"]
         FastAPI["FastAPI REST Engine"]
-        AuthModule["RBAC & OIDC Auth Layer"]
+        AuthModule["RBAC and OIDC Auth Layer"]
         ProtectedAdmin["Protected Admin Gateway"]
     end
 
-    subgraph StateLayer["State & Messaging Backbone"]
+    subgraph StateLayer["State and Messaging Backbone"]
         Postgres[("PostgreSQL 16\nAuthoritative State")]
-        Redis[("Redis 7\nCache & Leases")]
+        Redis[("Redis 7\nCache and Leases")]
         NATS["NATS JetStream\nEvent Bus"]
     end
 
-    subgraph OrchestrationLayer["Agent Execution & Workflow Engine"]
+    subgraph OrchestrationLayer["Agent Execution and Workflow Engine"]
         Temporal["Temporal Workflow Cluster\n(Port 7233)"]
         Workers["Agent Worker Loop\n(LangGraph Runtimes)"]
     end
 
-    subgraph ToolingLayer["Sandboxed Tool & Storage Providers"]
-        Sandbox["Tool Gateway\n(Docker / gVisor Containment)"]
+    subgraph ToolingLayer["Sandboxed Tool and Storage Providers"]
+        Sandbox["Tool Gateway\n(Docker or gVisor Containment)"]
         Gitea["Gitea Git Server\n(Isolated Worktrees)"]
         S3["SeaweedFS / S3\n(CAS Artifact Storage)"]
         Qdrant["Qdrant Vector DB\n(Semantic Project Memory)"]
@@ -84,20 +84,20 @@ sequenceDiagram
     participant DB as PostgreSQL State
     participant WF as Temporal Engine
     participant Agent as Autonomous AI Agent
-    participant Box as Sandboxed Runtime
+    participant Sandbox as Sandboxed Runtime
     participant Git as Gitea Repo
 
-    Human->>API: Create Task ("Implement Feature X")
+    Human->>API: Create Task (Implement Feature X)
     API->>DB: Persist Task (Status: TODO, Version: 1)
     Human->>API: Assign Task to Agent
     API->>WF: Dispatch Agent Execution Signal
     WF->>Agent: Initialize Cognitive Graph (LangGraph)
-    Agent->>Git: Branch & Create Isolated Worktree
-    Agent->>Box: Execute Tests & Generate Patch
-    Box-->>Agent: Verification Succeeded
-    Agent->>DB: Update Task (Status: REVIEW, Artifacts: Attached)
+    Agent->>Git: Branch and Create Isolated Worktree
+    Agent->>Sandbox: Execute Tests and Generate Patch
+    Sandbox-->>Agent: Verification Succeeded
+    Agent->>DB: Update Task (Status: REVIEW, Artifacts Attached)
     Agent->>Human: Trigger Review Request Notification
-    Human->>API: Review Diff & Approve Task
+    Human->>API: Review Diff and Approve Task
     API->>Git: Merge Worktree to Main
     API->>DB: Transition Task (Status: DONE)
 ```
