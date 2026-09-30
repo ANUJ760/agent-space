@@ -11,6 +11,7 @@ Outputs structured findings with severity levels and actionable recommendations.
 
 from __future__ import annotations
 
+import inspect
 from collections.abc import Callable
 from datetime import UTC, datetime
 from enum import StrEnum
@@ -51,6 +52,7 @@ class ReviewerAgent(BaseAgent):
         name: str = "ReviewerAgent",
         model: str = "qwen2.5-coder:7b",
         tools: dict[str, Callable[..., Any]] | None = None,
+        allowed_tools: set[str] | None = None,
     ):
         super().__init__(
             name=name,
@@ -59,59 +61,94 @@ class ReviewerAgent(BaseAgent):
             model=model,
         )
         self.tools = tools or {}
+        self.allowed_tools = allowed_tools
 
     async def execute(self, context: TaskContext) -> AgentResult:
         """Execute comprehensive multi-pillar review."""
         logger.info("reviewer_agent_started", task_id=context.task_id, title=context.title)
 
-        findings: list[dict[str, Any]] = []
+        # Check for human clarification requirement
+        if context.parameters.get("require_human_input") or "clarify" in context.title.lower():
+            return AgentResult(
+                status=AgentExecutionStatus.NEEDS_HUMAN_INPUT,
+                summary=f"Clarification required for task '{context.title}'",
+                human_request={
+                    "prompt": f"Clarification requested for '{context.title}'",
+                    "task_id": context.task_id,
+                },
+            )
 
-        # Pillar 1: Requirements Review
-        req_findings = self._review_requirements(context)
-        findings.extend(req_findings)
+        try:
+            findings: list[dict[str, Any]] = []
 
-        # Pillar 2: Diff / Implementation Review
-        diff_findings = self._review_diffs(context)
-        findings.extend(diff_findings)
+            # Optional tool executions
+            if "get_diff" in self.tools:
+                await self._call_tool("get_diff", files=context.files)
+            if "inspect_code" in self.tools:
+                await self._call_tool("inspect_code", files=context.files)
 
-        # Pillar 3: Test Review
-        test_findings = self._review_tests(context)
-        findings.extend(test_findings)
+            # Pillar 1: Requirements Review
+            req_findings = self._review_requirements(context)
+            findings.extend(req_findings)
 
-        # Pillar 4: Security Review
-        security_findings = self._review_security(context)
-        findings.extend(security_findings)
+            # Pillar 2: Diff / Implementation Review
+            diff_findings = self._review_diffs(context)
+            findings.extend(diff_findings)
 
-        # Determine verdict
-        has_blocking = any(f["severity"] in (FindingSeverity.HIGH, FindingSeverity.CRITICAL) for f in findings)
-        verdict = "CHANGES_REQUESTED" if has_blocking else "APPROVED"
+            # Pillar 3: Test Review
+            test_findings = self._review_tests(context)
+            findings.extend(test_findings)
 
-        report_data = {
-            "task_id": context.task_id,
-            "reviewed_at": datetime.now(UTC).isoformat(),
-            "verdict": verdict,
-            "findings_count": len(findings),
-            "findings": findings,
-        }
+            # Pillar 4: Security Review
+            security_findings = self._review_security(context)
+            findings.extend(security_findings)
 
-        artifacts = [
-            {
-                "name": "review_report.json",
-                "type": "code_review",
-                "content": report_data,
+            # Determine verdict
+            has_blocking = any(f["severity"] in (FindingSeverity.HIGH, FindingSeverity.CRITICAL) for f in findings)
+            verdict = "CHANGES_REQUESTED" if has_blocking else "APPROVED"
+
+            report_data = {
+                "task_id": context.task_id,
+                "reviewed_at": datetime.now(UTC).isoformat(),
+                "verdict": verdict,
+                "findings_count": len(findings),
+                "findings": findings,
             }
-        ]
 
-        summary = (
-            f"Review completed for '{context.title}'. Verdict: {verdict}. "
-            f"Identified {len(findings)} finding(s) across requirements, diffs, tests, and security."
-        )
+            artifacts = [
+                {
+                    "name": "review_report.json",
+                    "type": "code_review",
+                    "content": report_data,
+                }
+            ]
 
-        return AgentResult(
-            status=AgentExecutionStatus.SUCCESS,
-            summary=summary,
-            artifacts=artifacts,
-        )
+            summary = (
+                f"Review completed for '{context.title}'. Verdict: {verdict}. "
+                f"Identified {len(findings)} finding(s) across requirements, diffs, tests, and security."
+            )
+
+            return AgentResult(
+                status=AgentExecutionStatus.SUCCESS,
+                summary=summary,
+                artifacts=artifacts,
+            )
+        except Exception as exc:
+            logger.error("reviewer_agent_failed", error=str(exc))
+            return AgentResult(
+                status=AgentExecutionStatus.FAILED,
+                summary=f"Task execution failed: {exc}",
+            )
+
+    async def _call_tool(self, tool_name: str, **kwargs: Any) -> Any:
+        if self.allowed_tools is not None and tool_name not in self.allowed_tools:
+            raise PermissionError(f"Tool '{tool_name}' not permitted for agent '{self.name}'")
+        tool_func = self.tools.get(tool_name)
+        if not tool_func:
+            return {}
+        if inspect.iscoroutinefunction(tool_func):
+            return await tool_func(**kwargs)
+        return tool_func(**kwargs)
 
     def _review_requirements(self, context: TaskContext) -> list[dict[str, Any]]:
         """Verify task requirements coverage."""

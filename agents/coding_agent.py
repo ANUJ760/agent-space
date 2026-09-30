@@ -18,6 +18,7 @@ Implements the standard developer pipeline:
     report
 """
 
+import inspect
 from collections.abc import Callable
 from typing import Any
 
@@ -37,6 +38,7 @@ class CodingAgent(BaseAgent):
         name: str = "CodingAgent",
         model: str = "qwen2.5-coder:7b",
         tools: dict[str, Callable[..., Any]] | None = None,
+        allowed_tools: set[str] | None = None,
     ):
         super().__init__(
             name=name,
@@ -45,79 +47,99 @@ class CodingAgent(BaseAgent):
             model=model,
         )
         self.tools = tools or {}
+        self.allowed_tools = allowed_tools
 
     async def execute(self, context: TaskContext) -> AgentResult:
         """Execute structured coding workflow."""
         logger.info("coding_agent_started", task_id=context.task_id, title=context.title)
 
-        # Step 1: Read Task
-        requirements = context.description or context.title
-        target_files = list(context.files) if context.files else ["src/main.py"]
-        logger.debug("coding_task_requirements", requirements=requirements)
+        # Check for human clarification requirement
+        if context.parameters.get("require_human_input") or "clarify" in context.title.lower():
+            return AgentResult(
+                status=AgentExecutionStatus.NEEDS_HUMAN_INPUT,
+                summary=f"Clarification required for task '{context.title}'",
+                human_request={
+                    "prompt": f"Clarification requested for '{context.title}'",
+                    "task_id": context.task_id,
+                },
+            )
 
-        # Step 2: Inspect Repository
-        inspected: dict[str, str] = {}
-        if "inspect_files" in self.tools:
-            inspected = await self._call_tool("inspect_files", files=target_files)
-        logger.debug("coding_inspected_files", count=len(inspected))
-
-        # Step 3: Plan
-        plan = f"Plan: Implement updates for '{context.title}' across {len(target_files)} file(s)."
-        logger.debug("coding_plan_constructed", plan=plan)
-
-        # Step 4: Edit
         changed_files: list[str] = []
-        for file_path in target_files:
-            if "edit_file" in self.tools:
-                await self._call_tool("edit_file", path=file_path, content="# updated code")
-            changed_files.append(file_path)
+        try:
+            # Step 1: Read Task
+            requirements = context.description or context.title
+            target_files = list(context.files) if context.files else ["src/main.py"]
+            logger.debug("coding_task_requirements", requirements=requirements)
 
-        # Step 5: Run Tests
-        test_results = {"passed": 1, "failed": 0, "total": 1, "duration_s": 0.05}
-        if "run_tests" in self.tools:
-            test_results = await self._call_tool("run_tests", paths=changed_files)
+            # Step 2: Inspect Repository
+            inspected: dict[str, str] = {}
+            if "inspect_files" in self.tools:
+                inspected = await self._call_tool("inspect_files", files=target_files)
+            logger.debug("coding_inspected_files", count=len(inspected))
 
-        # Step 6: Produce Diff
-        diff_patch = (
-            f"--- a/{changed_files[0] if changed_files else 'file'}\n"
-            f"+++ b/{changed_files[0] if changed_files else 'file'}\n"
-            f"@@ -1 +1 @@\n"
-            f"+# updated code for {context.title}\n"
-        )
-        artifacts = [
-            {
-                "name": "changes.patch",
-                "type": "diff",
-                "content": diff_patch,
-            }
-        ]
+            # Step 3: Plan
+            plan = f"Plan: Implement updates for '{context.title}' across {len(target_files)} file(s)."
+            logger.debug("coding_plan_constructed", plan=plan)
 
-        # Step 7: Commit
-        commit_sha = "mock-sha-commit"
-        if "commit" in self.tools:
-            commit_res = await self._call_tool("commit", message=f"feat: {context.title}")
-            commit_sha = commit_res.get("sha", commit_sha)
+            # Step 4: Edit
+            for file_path in target_files:
+                if "edit_file" in self.tools:
+                    await self._call_tool("edit_file", path=file_path, content="# updated code")
+                changed_files.append(file_path)
 
-        # Step 8: Report
-        summary = (
-            f"Implemented '{context.title}'. Changed {len(changed_files)} file(s), "
-            f"tests: {test_results.get('passed', 0)} passed, commit: {commit_sha[:7]}."
-        )
+            # Step 5: Run Tests
+            test_results = {"passed": 1, "failed": 0, "total": 1, "duration_s": 0.05}
+            if "run_tests" in self.tools:
+                test_results = await self._call_tool("run_tests", paths=changed_files)
 
-        return AgentResult(
-            status=AgentExecutionStatus.SUCCESS,
-            summary=summary,
-            changed_files=changed_files,
-            artifacts=artifacts,
-            tests=test_results,
-        )
+            # Step 6: Produce Diff
+            diff_patch = (
+                f"--- a/{changed_files[0] if changed_files else 'file'}\n"
+                f"+++ b/{changed_files[0] if changed_files else 'file'}\n"
+                f"@@ -1 +1 @@\n"
+                f"+# updated code for {context.title}\n"
+            )
+            artifacts = [
+                {
+                    "name": "changes.patch",
+                    "type": "diff",
+                    "content": diff_patch,
+                }
+            ]
+
+            # Step 7: Commit
+            commit_sha = "mock-sha-commit"
+            if "commit" in self.tools:
+                commit_res = await self._call_tool("commit", message=f"feat: {context.title}")
+                commit_sha = commit_res.get("sha", commit_sha)
+
+            # Step 8: Report
+            summary = (
+                f"Implemented '{context.title}'. Changed {len(changed_files)} file(s), "
+                f"tests: {test_results.get('passed', 0)} passed, commit: {commit_sha[:7]}."
+            )
+
+            return AgentResult(
+                status=AgentExecutionStatus.SUCCESS,
+                summary=summary,
+                changed_files=changed_files,
+                artifacts=artifacts,
+                tests=test_results,
+            )
+        except Exception as exc:
+            logger.error("coding_agent_failed", error=str(exc))
+            return AgentResult(
+                status=AgentExecutionStatus.FAILED,
+                summary=f"Task execution failed: {exc}",
+                changed_files=changed_files,
+            )
 
     async def _call_tool(self, tool_name: str, **kwargs: Any) -> Any:
+        if self.allowed_tools is not None and tool_name not in self.allowed_tools:
+            raise PermissionError(f"Tool '{tool_name}' not permitted for agent '{self.name}'")
         tool_func = self.tools.get(tool_name)
         if not tool_func:
             return {}
-        import inspect
-
         if inspect.iscoroutinefunction(tool_func):
             return await tool_func(**kwargs)
         return tool_func(**kwargs)
