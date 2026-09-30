@@ -4,6 +4,7 @@ import React from "react";
 import { usePathname } from "next/navigation";
 import { Sidebar } from "@/components/layout/sidebar";
 import { Header } from "@/components/layout/header";
+import { ProtectedRoute } from "@/components/auth/protected-route";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -14,14 +15,16 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <div className="flex min-h-screen">
-      <Sidebar />
-      <div className="flex-1 flex flex-col pl-64">
-        <Header />
-        <main className="flex-1 p-8 bg-muted/20 overflow-y-auto">
-          {children}
-        </main>
+    <ProtectedRoute>
+      <div className="flex min-h-screen">
+        <Sidebar />
+        <div className="flex-1 flex flex-col pl-64">
+          <Header />
+          <main className="flex-1 p-8 bg-muted/20 overflow-y-auto">
+            {children}
+          </main>
+        </div>
       </div>
-    </div>
+    </ProtectedRoute>
   );
 }
