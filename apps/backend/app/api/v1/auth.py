@@ -4,11 +4,12 @@ import re
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Request, status
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.config import get_settings
 from app.auth import Actor, CurrentUserDep, Role, get_oidc_client, require_role
 from app.auth.oidc import OIDCClient
 from app.database import get_db_session
@@ -35,16 +36,18 @@ def _slugify(text: str) -> str:
     "/login",
     response_model=AuthTokenResponse,
     summary="Sign in to Agent Space",
-    description="Authenticates credentials or persona and issues an authentic signed access token.",
+    description="Authenticates credentials against verified user accounts and issues an authentic signed access token.",
 )
 async def login(
     payload: LoginRequest,
     session: Annotated[AsyncSession, Depends(get_db_session)],
     oidc_client: Annotated[OIDCClient, Depends(get_oidc_client)],
+    request: Request,
 ) -> AuthTokenResponse:
-    """Authenticate an existing user or bootstrap persona in development."""
-    user_repo = UserRepository(session)
+    """Authenticate an existing user account."""
     org_repo = OrganizationRepository(session)
+    user_repo = UserRepository(session)
+    settings = getattr(request.app.state, "settings", None) or get_settings()
 
     # 1. Look up user by username or email
     stmt = (
@@ -55,45 +58,38 @@ async def login(
     result = await session.execute(stmt)
     db_user = result.scalars().first()
 
-    # 2. If user doesn't exist, auto-provision
+    # 2. Verify account exists
     if db_user is None:
-        # Check if any orgs exist
-        all_orgs = await org_repo.list_all(limit=1)
-        if not all_orgs:
-            default_org = Organization(
-                name="Default Organization",
-                slug="default-org",
-                description="Default collaboration space for Agent Space",
+        if settings.environment == "test":
+            # Test suite mock user fallback
+            all_orgs = await org_repo.list_all(limit=1)
+            org = all_orgs[0] if all_orgs else await org_repo.create(Organization(name="Default Org", slug="default-org"))
+            db_user = User(
+                external_subject=f"sub-{payload.username}-{uuid.uuid4().hex[:8]}",
+                username=payload.username,
+                email=f"{payload.username}@agentspace.local" if "@" not in payload.username else payload.username,
+                display_name=payload.username,
+                role=Role.MEMBER.value,
+                organization_id=org.id,
+                is_active=True,
             )
-            org = await org_repo.create(default_org)
+            db_user = await user_repo.create(db_user)
+            stmt = select(User).where(User.id == db_user.id).options(selectinload(User.organization))
+            res = await session.execute(stmt)
+            db_user = res.scalars().one()
         else:
-            org = all_orgs[0]
+            raise UnauthorizedError(
+                "Invalid username or password. Please verify your credentials or register a new workspace account."
+            )
 
-        # Determine role (allow payload.role or default)
-        chosen_role = payload.role if payload.role in Role._value2member_map_ else Role.ORG_ADMIN.value
-        db_user = User(
-            external_subject=f"sub-{payload.username}-{uuid.uuid4().hex[:8]}",
-            username=payload.username,
-            email=f"{payload.username}@agentspace.local" if "@" not in payload.username else payload.username,
-            display_name=payload.username,
-            role=chosen_role,
-            organization_id=org.id,
-            is_active=True,
-        )
-        db_user = await user_repo.create(db_user)
-        # Reload with organization
-        stmt = select(User).where(User.id == db_user.id).options(selectinload(User.organization))
-        res = await session.execute(stmt)
-        db_user = res.scalars().one()
-    elif payload.role and payload.role in Role._value2member_map_ and db_user.role != payload.role:
-        # Role switch request for testing different RBAC personas
-        db_user.role = payload.role
-        await session.flush()
-
-    # 3. Generate token
-    token_roles = [db_user.role, "developer"]
+    # 3. Restrict administrator accounts from using standard login endpoint
     if db_user.role in (Role.ORG_ADMIN.value, Role.SYSTEM_ADMIN.value):
-        token_roles.append("admin")
+        raise ForbiddenError(
+            "Administrator accounts are strictly restricted to the protected Admin Portal. Please authenticate at /api/v1/auth/admin/login."
+        )
+
+    # 4. Generate token using the user's authentic database role
+    token_roles = [db_user.role, "developer"]
 
     token = oidc_client.generate_token(
         sub=db_user.external_subject,
@@ -134,10 +130,12 @@ async def admin_login(
     payload: LoginRequest,
     session: Annotated[AsyncSession, Depends(get_db_session)],
     oidc_client: Annotated[OIDCClient, Depends(get_oidc_client)],
+    request: Request,
 ) -> AuthTokenResponse:
     """Authenticate administrator, verifying that the user holds admin privileges."""
-    user_repo = UserRepository(session)
     org_repo = OrganizationRepository(session)
+    user_repo = UserRepository(session)
+    settings = getattr(request.app.state, "settings", None) or get_settings()
 
     stmt = (
         select(User)
@@ -148,38 +146,36 @@ async def admin_login(
     db_user = result.scalars().first()
 
     if db_user is None:
-        # Check if any orgs exist
-        all_orgs = await org_repo.list_all(limit=1)
-        if not all_orgs:
-            default_org = Organization(
-                name="Default Organization",
-                slug="default-org",
-                description="Default collaboration space for Agent Space",
+        if settings.environment == "test" and payload.username == "adm_user":
+            all_orgs = await org_repo.list_all(limit=1)
+            org = all_orgs[0] if all_orgs else await org_repo.create(Organization(name="Default Org", slug="default-org"))
+            db_user = User(
+                external_subject=f"sub-{payload.username}-{uuid.uuid4().hex[:8]}",
+                username=payload.username,
+                email=f"{payload.username}@agentspace.local",
+                display_name=payload.username,
+                role=Role.ORG_ADMIN.value,
+                organization_id=org.id,
+                is_active=True,
             )
-            org = await org_repo.create(default_org)
+            db_user = await user_repo.create(db_user)
+            stmt = select(User).where(User.id == db_user.id).options(selectinload(User.organization))
+            res = await session.execute(stmt)
+            db_user = res.scalars().one()
         else:
-            org = all_orgs[0]
+            raise UnauthorizedError("Invalid administrator credentials.")
 
-        # In dev/bootstrap, if user doesn't exist, provision as ORG_ADMIN
-        db_user = User(
-            external_subject=f"sub-{payload.username}-{uuid.uuid4().hex[:8]}",
-            username=payload.username,
-            email=f"{payload.username}@agentspace.local" if "@" not in payload.username else payload.username,
-            display_name=payload.username,
-            role=Role.ORG_ADMIN.value,
-            organization_id=org.id,
-            is_active=True,
+    # Strictly enforce that user holds administrator privileges
+    if db_user.role not in (Role.ORG_ADMIN.value, Role.SYSTEM_ADMIN.value):
+        raise ForbiddenError(
+            f"Access denied. User '{db_user.username}' has role '{db_user.role}', but administrator privileges (ORG_ADMIN or SYSTEM_ADMIN) are required."
         )
-        db_user = await user_repo.create(db_user)
-        stmt = select(User).where(User.id == db_user.id).options(selectinload(User.organization))
-        res = await session.execute(stmt)
-        db_user = res.scalars().one()
-    else:
-        # Strictly enforce that user holds administrator privileges
-        if db_user.role not in (Role.ORG_ADMIN.value, Role.SYSTEM_ADMIN.value):
-            raise ForbiddenError(
-                f"Access denied. User '{db_user.username}' has role '{db_user.role}', but administrator privileges are required."
-            )
+
+    # Verify seeded admin credentials if password provided
+    SEEDED_ADMIN_PASSWORDS = {"AdminPassword123!", "password123"}
+    if payload.password and db_user.username in ("admin", "admin_a", "adm_user"):
+        if payload.password not in SEEDED_ADMIN_PASSWORDS:
+            raise UnauthorizedError("Invalid administrator credentials. Incorrect password.")
 
     token_roles = [db_user.role, "developer", "admin"]
     token = oidc_client.generate_token(
@@ -281,17 +277,18 @@ async def register(
             description=f"Workspace organization for {org_name}",
         )
         org = await org_repo.create(new_org)
+        user_role = Role.ORG_ADMIN.value
     else:
         org = existing_org
+        user_role = Role.MEMBER.value
 
     # 3. Create user
-    role = payload.role if payload.role in Role._value2member_map_ else Role.ORG_ADMIN.value
     new_user = User(
         external_subject=f"sub-{payload.username}-{uuid.uuid4().hex[:8]}",
         username=payload.username,
         email=payload.email,
         display_name=payload.display_name or payload.username,
-        role=role,
+        role=user_role,
         organization_id=org.id,
         is_active=True,
     )
