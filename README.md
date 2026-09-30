@@ -122,6 +122,7 @@ agent-space/
    cp .env.example .env
    ```
 2. Adjust configuration parameters in `.env` as required for your local setup.
+   > **Detailed Walkthrough**: See [`docs/setup_guide.md`](docs/setup_guide.md) for production placeholder values, database seeding, credentials matrix, and 3-tab workspace instructions.
 
 ### Development Commands
 
