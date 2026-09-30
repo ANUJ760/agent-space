@@ -1,0 +1,104 @@
+# ==============================================================================
+# Agent Space - Production Prometheus Alert Rules (M86)
+# ==============================================================================
+# Mandatory production alerts per Section 95:
+# 1. API error rate
+# 2. database failure
+# 3. queue backlog
+# 4. agent failure
+# 5. workflow failure
+# 6. sandbox failure
+# 7. GPU/model failure
+# 8. disk usage
+# ==============================================================================
+
+groups:
+  - name: agentspace_production_alerts
+    rules:
+      # 1. API Error Rate
+      - alert: APIErrorRateHigh
+        expr: (sum(rate(api_errors_total[5m])) / sum(rate(api_requests_total[5m]))) * 100 > 1
+        for: 2m
+        labels:
+          severity: critical
+          category: api
+        annotations:
+          summary: "API 5xx error rate exceeds 1%"
+          description: "High error rate observed in AgentSpace backend API (current: {{ $value }}%)."
+
+      # 2. Database Failure
+      - alert: DatabaseFailure
+        expr: pg_up == 0 or increase(api_errors_total{error_type="DatabaseError"}[2m]) > 5
+        for: 1m
+        labels:
+          severity: critical
+          category: database
+        annotations:
+          summary: "PostgreSQL database connectivity failure"
+          description: "PostgreSQL database is unreachable or throwing connection pool errors."
+
+      # 3. Queue Backlog
+      - alert: QueueBacklogHigh
+        expr: queue_depth > 100
+        for: 5m
+        labels:
+          severity: warning
+          category: queue
+        annotations:
+          summary: "Event or task queue backlog exceeding threshold"
+          description: "Queue {{ $labels.queue_name }} has {{ $value }} pending items waiting for processing."
+
+      # 4. Agent Failure
+      - alert: AgentExecutionFailure
+        expr: (sum(rate(agent_execution_total{status="FAILED"}[5m])) / sum(rate(agent_execution_total[5m]))) * 100 > 5
+        for: 3m
+        labels:
+          severity: critical
+          category: agents
+        annotations:
+          summary: "Agent task execution failure rate exceeds 5%"
+          description: "Autonomous agents are failing execution steps in {{ $labels.agent_role }}."
+
+      # 5. Workflow Failure
+      - alert: TemporalWorkflowFailure
+        expr: rate(workflow_failed_total[5m]) > 0
+        for: 1m
+        labels:
+          severity: critical
+          category: workflow
+        annotations:
+          summary: "Temporal durable workflow failure detected"
+          description: "One or more {{ $labels.workflow_type }} durable workflows entered FAILED state."
+
+      # 6. Sandbox Failure
+      - alert: SandboxExecutionFailure
+        expr: rate(tool_calls_total{status="SANDBOX_ERROR"}[5m]) > 0.05
+        for: 2m
+        labels:
+          severity: warning
+          category: sandbox
+        annotations:
+          summary: "Sandbox container execution failure or breakout attempt"
+          description: "Elevated failure rate in Docker sandbox container isolation runtime."
+
+      # 7. GPU/Model Failure
+      - alert: ModelGatewayFailure
+        expr: (rate(api_errors_total{error_type="ModelGatewayError"}[5m]) > 0) or (histogram_quantile(0.95, sum(rate(model_latency_bucket[5m])) by (le)) > 30)
+        for: 2m
+        labels:
+          severity: critical
+          category: models
+        annotations:
+          summary: "Foundation LLM or GPU inference service failure"
+          description: "High error rate or severe latency (>30s) detected on model provider {{ $labels.provider }}."
+
+      # 8. Disk Usage
+      - alert: DiskUsageHigh
+        expr: ((node_filesystem_size_bytes - node_filesystem_free_bytes) / node_filesystem_size_bytes) * 100 > 85
+        for: 5m
+        labels:
+          severity: warning
+          category: storage
+        annotations:
+          summary: "Persistent volume or node disk usage exceeds 85%"
+          description: "Disk mount {{ $labels.mountpoint }} is {{ $value }}% full."

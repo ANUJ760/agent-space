@@ -1,0 +1,37 @@
+# ==============================================================================
+# Agent Space - Alertmanager Configuration (M86)
+# ==============================================================================
+
+global:
+  resolve_timeout: 5m
+
+route:
+  group_by: ["alertname", "category", "severity"]
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+  receiver: "production-default-webhook"
+
+  routes:
+    - match:
+        severity: critical
+      receiver: "production-critical-webhook"
+      continue: true
+
+receivers:
+  - name: "production-default-webhook"
+    webhook_configs:
+      - url: "http://backend:8000/api/v1/telemetry/alerts"
+        send_resolved: true
+
+  - name: "production-critical-webhook"
+    webhook_configs:
+      - url: "http://backend:8000/api/v1/telemetry/alerts/critical"
+        send_resolved: true
+
+inhibit_rules:
+  - source_match:
+      severity: "critical"
+    target_match:
+      severity: "warning"
+    equal: ["alertname", "category"]
