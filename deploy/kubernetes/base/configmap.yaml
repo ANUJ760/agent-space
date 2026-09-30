@@ -1,0 +1,22 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: agent-space-config
+  namespace: agent-space
+  labels:
+    app.kubernetes.io/name: agent-space
+    app.kubernetes.io/part-of: agent-space
+data:
+  APP_ENV: "production"
+  DEBUG: "false"
+  LOG_FORMAT: "json"
+  PORT: "8000"
+  FRONTEND_PORT: "3000"
+  REDIS_URL: "redis://agent-space-redis.agent-space.svc.cluster.local:6379/0"
+  NATS_URL: "nats://agent-space-nats.agent-space.svc.cluster.local:4222"
+  TEMPORAL_HOST: "agent-space-temporal.agent-space.svc.cluster.local:7233"
+  KEYCLOAK_SERVER_URL: "http://keycloak.agent-space.svc.cluster.local:8080"
+  KEYCLOAK_REALM: "agentspace"
+  KEYCLOAK_CLIENT_ID: "agentspace-backend"
+  PROMETHEUS_METRICS_ENABLED: "true"
+  NEXT_PUBLIC_API_URL: "/api/v1"

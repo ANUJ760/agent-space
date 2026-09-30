@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: agent-space-backend
+  namespace: agent-space
+  labels:
+    app.kubernetes.io/name: agent-space-backend
+    app.kubernetes.io/component: api
+    app.kubernetes.io/part-of: agent-space
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: agent-space-backend
+  ports:
+    - name: http
+      port: 8000
+      targetPort: http
+      protocol: TCP
