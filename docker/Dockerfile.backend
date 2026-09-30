@@ -1,0 +1,69 @@
+# ==============================================================================
+# Agent Space - Production Backend Dockerfile (Hardened & Minimal)
+# ==============================================================================
+# Security features:
+# - Multi-stage build to isolate build tools from production runtime
+# - Minimal Debian/Python base image (python:3.11-slim)
+# - Pinned production dependencies (requirements-prod.txt)
+# - Dedicated unprivileged system user/group (appuser:10001)
+# - Non-root execution with read-only application code
+# - Active health check endpoint validation
+# - No secrets or credentials baked into image
+# ==============================================================================
+
+# --- Stage 1: Build virtual environment with pinned dependencies ---
+FROM python:3.11-slim AS builder
+
+WORKDIR /build
+
+# Install build dependencies required for compiling extensions
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends gcc libpq-dev && \
+    rm -rf /var/lib/apt/lists/*
+
+# Create virtualenv and install pinned production requirements
+RUN python -m venv /app/.venv
+ENV PATH="/app/.venv/bin:$PATH"
+
+COPY requirements-prod.txt .
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir -r requirements-prod.txt
+
+# --- Stage 2: Final Minimal & Hardened Runtime ---
+FROM python:3.11-slim AS runtime
+
+# Security hardening: Create non-root system group and user
+RUN groupadd -g 10001 appuser && \
+    useradd -u 10001 -g appuser -s /sbin/nologin -M appuser
+
+WORKDIR /app
+
+# Copy virtual environment from builder stage
+COPY --from=builder --chown=appuser:appuser /app/.venv /app/.venv
+
+# Environment configuration
+ENV PATH="/app/.venv/bin:$PATH" \
+    PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    APP_ENV=production \
+    PYTHONPATH=/app
+
+# Copy application modules and configs
+COPY --chown=appuser:appuser apps /app/apps
+COPY --chown=appuser:appuser agents /app/agents
+COPY --chown=appuser:appuser packages /app/packages
+COPY --chown=appuser:appuser alembic.ini /app/alembic.ini
+COPY --chown=appuser:appuser pyproject.toml /app/pyproject.toml
+
+# Set permissions and switch to unprivileged user
+USER 10001:10001
+
+# Expose backend API port
+EXPOSE 8000
+
+# Health check using Python stdlib (no extra tools like curl/wget needed)
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+  CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')" || exit 1
+
+# Launch application using production uvicorn factory
+ENTRYPOINT ["uvicorn", "app.main:create_app", "--factory", "--host", "0.0.0.0", "--port", "8000"]

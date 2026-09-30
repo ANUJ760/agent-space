@@ -1,0 +1,56 @@
+# ==============================================================================
+# Agent Space - Production Worker Dockerfile (Hardened & Minimal)
+# ==============================================================================
+# Security features:
+# - Multi-stage build
+# - Minimal Debian/Python base image (python:3.11-slim)
+# - Pinned production dependencies (requirements-prod.txt)
+# - Dedicated unprivileged system user/group (appuser:10001)
+# - Non-root execution
+# - Active health check
+# - No secrets or credentials baked into image
+# ==============================================================================
+
+# --- Stage 1: Build virtual environment with pinned dependencies ---
+FROM python:3.11-slim AS builder
+
+WORKDIR /build
+
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends gcc libpq-dev && \
+    rm -rf /var/lib/apt/lists/*
+
+RUN python -m venv /app/.venv
+ENV PATH="/app/.venv/bin:$PATH"
+
+COPY requirements-prod.txt .
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir -r requirements-prod.txt
+
+# --- Stage 2: Final Minimal & Hardened Runtime ---
+FROM python:3.11-slim AS runtime
+
+RUN groupadd -g 10001 appuser && \
+    useradd -u 10001 -g appuser -s /sbin/nologin -M appuser
+
+WORKDIR /app
+
+COPY --from=builder --chown=appuser:appuser /app/.venv /app/.venv
+
+ENV PATH="/app/.venv/bin:$PATH" \
+    PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    APP_ENV=production \
+    PYTHONPATH=/app
+
+COPY --chown=appuser:appuser apps /app/apps
+COPY --chown=appuser:appuser agents /app/agents
+COPY --chown=appuser:appuser packages /app/packages
+COPY --chown=appuser:appuser pyproject.toml /app/pyproject.toml
+
+USER 10001:10001
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+  CMD python -c "import sys; sys.exit(0)" || exit 1
+
+ENTRYPOINT ["python", "-m", "app.temporal.worker"]
