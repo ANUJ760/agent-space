@@ -70,12 +70,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     async (username: string, customToken?: string) => {
       setIsLoading(true);
       try {
-        const authToken = customToken || `token-${Date.now()}`;
+        const authToken = customToken || `dev-token-${username}-${Date.now()}`;
         const authenticatedUser: AuthUser = {
-          id: `usr-${Date.now()}`,
+          id: `usr-${username}-${Date.now()}`,
           username,
           email: `${username}@agentspace.local`,
-          role: "DEVELOPER",
+          role: "ORG_ADMIN",
         };
 
         setToken(authToken);

@@ -47,8 +47,13 @@ export async function apiFetch<T>(
   if (res.status === 401 && typeof window !== "undefined") {
     localStorage.removeItem("agentspace_token");
     localStorage.removeItem("agentspace_user");
-    window.location.href = "/unauthorized";
+    window.location.href = "/login";
     throw new Error("Unauthorized");
+  }
+
+  if (res.status === 403 && typeof window !== "undefined") {
+    window.location.href = "/unauthorized";
+    throw new Error("Forbidden");
   }
 
   if (!res.ok) {

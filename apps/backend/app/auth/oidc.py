@@ -106,6 +106,30 @@ class OIDCClient:
         if not token or not token.strip():
             raise UnauthorizedError("Empty token.")
 
+        # In local development mode, accept dev tokens to allow instant local collaboration without Keycloak
+        settings = get_settings()
+        if settings.environment == "development" and (
+            token in ("mock-dev-token", "test-token")
+            or token.startswith("mock-")
+            or token.startswith("token-")
+            or token.startswith("dev-")
+        ):
+            username = "admin_a"
+            if token.startswith("dev-token-"):
+                parts = token.split("-")
+                if len(parts) >= 3 and parts[2]:
+                    username = parts[2]
+            return {
+                "sub": f"sub-{username}",
+                "preferred_username": username,
+                "email": f"{username}@agentspace.local",
+                "email_verified": True,
+                "realm_access": {"roles": ["admin", "developer", "ORG_ADMIN", "SYSTEM_ADMIN"]},
+                "resource_access": {
+                    self._settings.client_id: {"roles": ["admin", "ORG_ADMIN", "SYSTEM_ADMIN"]}
+                },
+            }
+
         key = self.get_signing_key(token)
 
         try:
