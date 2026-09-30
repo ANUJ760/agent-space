@@ -7,6 +7,7 @@ summaries while strictly eliminating any chain-of-thought or internal reasoning.
 from __future__ import annotations
 
 import uuid
+from datetime import UTC, datetime
 from typing import Any
 
 from app.models.outbox import OutboxEvent
@@ -40,7 +41,9 @@ class ActivityFeedService:
         return sanitized
 
     @staticmethod
-    def format_event(event: OutboxEvent, agent_name: str = "Agent", agent_role: str = "WORKER") -> ActivityFeedItem:
+    def format_event(
+        event: OutboxEvent, agent_name: str = "Agent", agent_role: str = "WORKER"
+    ) -> ActivityFeedItem:
         """Create a safe ActivityFeedItem from an outbox or domain event."""
         payload = dict(event.payload or {})
         clean_meta = ActivityFeedService.sanitize_metadata(payload)
@@ -82,7 +85,7 @@ class ActivityFeedService:
             summary = f"Requested {payload.get('request_type', 'INPUT')}: {payload.get('prompt', '')[:60]}"
 
         return ActivityFeedItem(
-            id=event.id,
+            id=event.id or uuid.uuid4(),
             project_id=event.project_id or uuid.uuid4(),
             task_id=uuid.UUID(payload["task_id"]) if payload.get("task_id") else None,
             agent_id=uuid.UUID(payload["agent_id"]) if payload.get("agent_id") else None,
@@ -90,6 +93,6 @@ class ActivityFeedService:
             agent_role=payload.get("agent_role", agent_role),
             action=action,
             summary=summary,
-            timestamp=event.created_at,
+            timestamp=event.created_at or datetime.now(UTC),
             metadata=clean_meta,
         )
