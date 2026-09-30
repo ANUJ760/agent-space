@@ -59,32 +59,32 @@ export default function AdminLoginPage() {
   };
 
   return (
-    <div className="relative min-h-screen flex items-center justify-center p-6 sm:p-12 overflow-hidden">
+    <div className="relative min-h-screen flex items-center justify-center p-6 sm:p-12 overflow-hidden bg-background">
       <div className="w-full max-w-xl space-y-8 relative z-10">
-        {/* Curved Admin Card with Generous Space */}
-        <div className="rounded-[32px] border border-amber-500/20 bg-card/80 backdrop-blur-2xl shadow-2xl ring-1 ring-amber-500/10 p-8 sm:p-12 space-y-8 transition-all">
+        {/* High-Contrast Curved Admin Card */}
+        <div className="rounded-[32px] border border-amber-500/35 bg-zinc-950/90 backdrop-blur-2xl shadow-[0_0_60px_-15px_rgba(245,158,11,0.22)] ring-1 ring-amber-500/20 p-8 sm:p-12 space-y-8 transition-all">
           {/* Header & 3D Three.js Animation */}
           <div className="flex flex-col items-center text-center space-y-4">
-            <div className="relative p-1">
-              <AuthThreeAnimation mode="admin" size={130} />
+            <div className="relative p-1 filter drop-shadow-[0_0_16px_rgba(251,191,36,0.35)]">
+              <AuthThreeAnimation mode="admin" size={140} />
             </div>
 
-            <div className="space-y-1">
-              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-mono tracking-wider bg-amber-500/10 text-amber-400 border border-amber-500/30">
-                <Shield className="w-3.5 h-3.5" />
+            <div className="space-y-1.5">
+              <div className="inline-flex items-center gap-1.5 px-3.5 py-1 rounded-full text-[11px] font-mono font-bold tracking-widest bg-amber-500/15 text-amber-300 border border-amber-400/50 shadow-sm">
+                <Shield className="w-3.5 h-3.5 text-amber-400" />
                 <span>PRIVILEGED GATEWAY</span>
               </div>
-              <h1 className="text-3xl font-extrabold tracking-tight text-foreground pt-1">
+              <h1 className="text-3xl font-extrabold tracking-tight text-white drop-shadow-sm pt-1">
                 Admin Portal
               </h1>
             </div>
           </div>
 
-          {/* Minimal Error Display */}
+          {/* High-Contrast Error Display */}
           {error && (
-            <div className="flex items-center gap-3 p-4 rounded-2xl bg-destructive/10 text-destructive text-xs border border-destructive/20 animate-in fade-in duration-200">
-              <AlertCircle className="w-4 h-4 shrink-0" />
-              <div className="flex-1 font-medium">{error}</div>
+            <div className="flex items-center gap-3 p-4 rounded-2xl bg-rose-950/80 text-rose-200 text-xs font-medium border border-rose-500/60 shadow-lg shadow-rose-950/40 animate-in fade-in duration-200">
+              <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
+              <div className="flex-1">{error}</div>
             </div>
           )}
 
@@ -92,7 +92,7 @@ export default function AdminLoginPage() {
           <form onSubmit={handleSubmit} className="space-y-6">
             <div className="space-y-5">
               <div className="space-y-2">
-                <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5 ml-1">
+                <label className="text-xs font-bold text-zinc-200 uppercase tracking-wider flex items-center gap-2 ml-1">
                   <User className="w-3.5 h-3.5 text-amber-400" />
                   <span>Admin Username</span>
                 </label>
@@ -102,13 +102,13 @@ export default function AdminLoginPage() {
                   onChange={(e) => setUsername(e.target.value)}
                   required
                   autoFocus
-                  className="w-full px-4 py-3.5 text-sm rounded-2xl border border-border/70 bg-background/60 focus:outline-none focus:ring-2 focus:ring-amber-500/40 focus:border-amber-500/50 transition-all font-mono placeholder:text-muted-foreground/50"
+                  className="w-full px-4 py-3.5 text-sm font-medium rounded-2xl border border-zinc-700 bg-zinc-900/95 text-white placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-amber-400 hover:border-zinc-500 transition-all font-mono shadow-inner"
                   placeholder="admin"
                 />
               </div>
 
               <div className="space-y-2">
-                <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5 ml-1">
+                <label className="text-xs font-bold text-zinc-200 uppercase tracking-wider flex items-center gap-2 ml-1">
                   <Lock className="w-3.5 h-3.5 text-amber-400" />
                   <span>Admin Password</span>
                 </label>
@@ -118,15 +118,15 @@ export default function AdminLoginPage() {
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     required
-                    className="w-full px-4 py-3.5 text-sm rounded-2xl border border-border/70 bg-background/60 focus:outline-none focus:ring-2 focus:ring-amber-500/40 focus:border-amber-500/50 transition-all pr-12 placeholder:text-muted-foreground/50"
+                    className="w-full px-4 py-3.5 text-sm font-medium rounded-2xl border border-zinc-700 bg-zinc-900/95 text-white placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-amber-400 hover:border-zinc-500 transition-all pr-12 shadow-inner"
                     placeholder="••••••••"
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-4 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                    className="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-white transition-colors"
                   >
-                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    {showPassword ? <EyeOff className="w-4 h-4 text-amber-400" /> : <Eye className="w-4 h-4" />}
                   </button>
                 </div>
               </div>
@@ -135,20 +135,20 @@ export default function AdminLoginPage() {
             <button
               type="submit"
               disabled={isLoading}
-              className="w-full py-3.5 px-6 rounded-2xl bg-amber-500 text-black font-bold text-sm hover:bg-amber-400 active:scale-[0.99] transition-all shadow-lg flex items-center justify-center gap-2 disabled:opacity-50"
+              className="w-full py-4 px-6 rounded-2xl bg-gradient-to-r from-amber-400 via-amber-500 to-amber-600 hover:from-amber-300 hover:to-amber-500 text-zinc-950 font-black text-sm tracking-wide shadow-[0_0_25px_rgba(245,158,11,0.35)] hover:shadow-[0_0_35px_rgba(245,158,11,0.5)] active:scale-[0.99] transition-all flex items-center justify-center gap-2.5 disabled:opacity-50"
             >
               <KeyRound className="w-4 h-4" />
-              <span>{isLoading ? "Verifying..." : "Authenticate"}</span>
+              <span>{isLoading ? "Verifying..." : "Authenticate Privileges"}</span>
             </button>
           </form>
 
           {/* Return Navigation */}
-          <div className="pt-6 border-t border-border/40 flex items-center justify-center text-xs text-muted-foreground">
+          <div className="pt-6 border-t border-zinc-800 flex items-center justify-center text-xs">
             <Link
               href="/login"
-              className="text-muted-foreground hover:text-foreground transition-colors flex items-center gap-2"
+              className="text-zinc-400 hover:text-white transition-colors flex items-center gap-2 font-medium"
             >
-              <ArrowLeft className="w-3.5 h-3.5" />
+              <ArrowLeft className="w-3.5 h-3.5 text-amber-400" />
               <span>Back to standard member sign in</span>
             </Link>
           </div>

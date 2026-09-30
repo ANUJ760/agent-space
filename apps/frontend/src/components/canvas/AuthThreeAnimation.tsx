@@ -62,71 +62,71 @@ export function AuthThreeAnimation({
     container.innerHTML = "";
     container.appendChild(renderer.domElement);
 
-    // 3. Color Palette based on mode
+    // 3. Color Palette based on mode (High Contrast Neon/Vivid)
     const isSpecialAdmin = modeRef.current === "admin";
-    const primaryColor = isSpecialAdmin ? new THREE.Color("#f59e0b") : new THREE.Color("#06b6d4"); // Amber / Cyan
-    const secondaryColor = isSpecialAdmin ? new THREE.Color("#ef4444") : new THREE.Color("#a855f7"); // Red / Violet
+    const primaryColor = isSpecialAdmin ? new THREE.Color("#fbbf24") : new THREE.Color("#00f0ff"); // Vivid Gold / Neon Cyan
+    const secondaryColor = isSpecialAdmin ? new THREE.Color("#f43f5e") : new THREE.Color("#b026ff"); // Rose / Electric Violet
 
     // 4. Core Geometry (Icosahedron wireframe)
-    const coreGeometry = new THREE.IcosahedronGeometry(1.2, 1);
+    const coreGeometry = new THREE.IcosahedronGeometry(1.25, 1);
     const coreMaterial = new THREE.MeshBasicMaterial({
       color: primaryColor,
       wireframe: true,
       transparent: true,
-      opacity: 0.45,
+      opacity: 0.75,
     });
     const coreMesh = new THREE.Mesh(coreGeometry, coreMaterial);
     scene.add(coreMesh);
 
     // 5. Inner pulsing jewel / core sphere
-    const innerGeometry = new THREE.SphereGeometry(0.55, 16, 16);
+    const innerGeometry = new THREE.SphereGeometry(0.58, 16, 16);
     const innerMaterial = new THREE.MeshBasicMaterial({
       color: secondaryColor,
       wireframe: true,
       transparent: true,
-      opacity: 0.35,
+      opacity: 0.65,
     });
     const innerMesh = new THREE.Mesh(innerGeometry, innerMaterial);
     scene.add(innerMesh);
 
     // 6. Orbital Ring 1: Human Nodes / Primary (Tilted)
-    const ring1Count = 48;
+    const ring1Count = 52;
     const ring1Positions = new Float32Array(ring1Count * 3);
-    const ring1Radius = 2.1;
+    const ring1Radius = 2.15;
     for (let i = 0; i < ring1Count; i++) {
       const angle = (i / ring1Count) * Math.PI * 2;
       ring1Positions[i * 3] = Math.cos(angle) * ring1Radius;
-      ring1Positions[i * 3 + 1] = Math.sin(angle) * ring1Radius * 0.4;
-      ring1Positions[i * 3 + 2] = Math.sin(angle) * ring1Radius * 0.9;
+      ring1Positions[i * 3 + 1] = Math.sin(angle) * ring1Radius * 0.42;
+      ring1Positions[i * 3 + 2] = Math.sin(angle) * ring1Radius * 0.92;
     }
     const ring1Geometry = new THREE.BufferGeometry();
     ring1Geometry.setAttribute("position", new THREE.BufferAttribute(ring1Positions, 3));
     const ring1Material = new THREE.PointsMaterial({
       color: primaryColor,
-      size: 0.08,
+      size: 0.11,
       transparent: true,
-      opacity: 0.85,
+      opacity: 1.0,
     });
     const ring1Points = new THREE.Points(ring1Geometry, ring1Material);
     scene.add(ring1Points);
 
     // 7. Orbital Ring 2: Agent Nodes / Secondary (Counter-tilted)
-    const ring2Count = 48;
+    const ring2Count = 52;
     const ring2Positions = new Float32Array(ring2Count * 3);
-    const ring2Radius = 2.4;
+    const ring2Radius = 2.45;
     for (let i = 0; i < ring2Count; i++) {
       const angle = (i / ring2Count) * Math.PI * 2;
       ring2Positions[i * 3] = Math.cos(angle) * ring2Radius;
-      ring2Positions[i * 3 + 1] = -Math.sin(angle) * ring2Radius * 0.5;
-      ring2Positions[i * 3 + 2] = Math.sin(angle) * ring2Radius * 0.85;
+      ring2Positions[i * 3 + 1] = -Math.sin(angle) * ring2Radius * 0.52;
+      ring2Positions[i * 3 + 2] = Math.sin(angle) * ring2Radius * 0.88;
     }
     const ring2Geometry = new THREE.BufferGeometry();
     ring2Geometry.setAttribute("position", new THREE.BufferAttribute(ring2Positions, 3));
     const ring2Material = new THREE.PointsMaterial({
       color: secondaryColor,
-      size: 0.08,
+      size: 0.11,
       transparent: true,
-      opacity: 0.85,
+      opacity: 1.0,
     });
     const ring2Points = new THREE.Points(ring2Geometry, ring2Material);
     scene.add(ring2Points);
