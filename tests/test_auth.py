@@ -14,6 +14,7 @@ Validates:
 
 import time
 from collections.abc import Iterator
+from pathlib import Path
 from typing import Any
 
 import jwt
@@ -301,3 +302,64 @@ class TestAuthDependencies:
             data = resp.json()
             assert data["authenticated"] is True
             assert data["username"] == "charlie"
+
+
+class TestAdminEndpoints:
+    @pytest.fixture()
+    def app(self, oidc_client: OIDCClient, tmp_path: Path) -> FastAPI:
+        import asyncio
+        from app.database import DatabaseManager
+
+        db_path = tmp_path / "admin_test.db"
+        settings = Settings(
+            environment="test",
+            debug=True,
+            log_format="text",
+            database_url=f"sqlite+aiosqlite:///{db_path}",
+        )
+        db = DatabaseManager(settings.database)
+        asyncio.run(db.connect())
+        asyncio.run(db.create_all())
+        asyncio.run(db.disconnect())
+        return create_app(settings=settings)
+
+    def test_admin_endpoints_enforce_rbac(
+        self, app: FastAPI, rsa_keys: tuple[Any, Any, bytes, bytes]
+    ) -> None:
+        _, _, pem_private, _ = rsa_keys
+        admin_token = create_token(
+            pem_private,
+            sub="sub-admin-test",
+            preferred_username="adm_user",
+            roles=["ORG_ADMIN", "admin"],
+        )
+        member_token = create_token(
+            pem_private,
+            sub="sub-member-test",
+            preferred_username="mem_user",
+            roles=["MEMBER"],
+        )
+
+        with TestClient(app) as client:
+            # 1. Admin login endpoint accepts admin and returns ORG_ADMIN
+            resp = client.post("/api/v1/auth/admin/login", json={"username": "adm_user"})
+            assert resp.status_code == status.HTTP_200_OK
+            assert resp.json()["user"]["role"] in ("ORG_ADMIN", "SYSTEM_ADMIN")
+
+            # 2. Member token rejected on protected admin session with 403 Forbidden
+            resp = client.get(
+                "/api/v1/auth/admin/session",
+                headers={"Authorization": f"Bearer {member_token}"},
+            )
+            assert resp.status_code == status.HTTP_403_FORBIDDEN
+            assert resp.json()["code"] == "FORBIDDEN"
+
+            # 3. Admin token accepted on protected admin session with 200 OK
+            resp = client.get(
+                "/api/v1/auth/admin/session",
+                headers={"Authorization": f"Bearer {admin_token}"},
+            )
+            assert resp.status_code == status.HTTP_200_OK
+            assert resp.json()["username"] == "adm_user"
+
+

@@ -70,3 +70,31 @@ export interface ProjectMember {
     role: string;
   };
 }
+
+export interface Organization {
+  id: string;
+  name: string;
+  slug: string;
+  description?: string | null;
+  is_active?: boolean;
+}
+
+export interface UserProfile {
+  id: string;
+  external_subject: string;
+  email: string;
+  username: string;
+  display_name?: string | null;
+  role: string;
+  is_active: boolean;
+  organization?: Organization | null;
+  token_roles?: string[];
+}
+
+export interface AuthTokenResponse {
+  access_token: string;
+  token_type: string;
+  expires_in: number;
+  user: UserProfile;
+}
+

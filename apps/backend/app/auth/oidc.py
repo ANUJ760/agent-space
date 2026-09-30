@@ -31,6 +31,56 @@ class OIDCClient:
         self._discovery_cache: dict[str, Any] | None = None
         self._jwks_client: PyJWKClient | None = None
         self._mock_keys: dict[str, Any] = {}
+        self._internal_key_pair: tuple[Any, bytes] | None = None
+
+    def _get_or_create_internal_key(self) -> tuple[Any, bytes]:
+        if self._internal_key_pair is None:
+            from cryptography.hazmat.primitives.asymmetric import rsa
+            from cryptography.hazmat.primitives import serialization
+
+            priv = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+            pub = priv.public_key()
+            pem_priv = priv.private_bytes(
+                encoding=serialization.Encoding.PEM,
+                format=serialization.PrivateFormat.PKCS8,
+                encryption_algorithm=serialization.NoEncryption(),
+            )
+            self._internal_key_pair = (pub, pem_priv)
+            self.register_mock_key("agentspace-internal-key", pub)
+        return self._internal_key_pair
+
+    def generate_token(
+        self,
+        sub: str,
+        username: str,
+        email: str,
+        roles: list[str],
+        expires_in: int = 86400,
+    ) -> str:
+        """Issue an authentic RS256 JWT access token compatible with Keycloak verification."""
+        import time
+
+        _, pem_priv = self._get_or_create_internal_key()
+        now = int(time.time())
+        payload: dict[str, Any] = {
+            "sub": sub,
+            "iss": self.expected_issuer,
+            "aud": self.expected_audience,
+            "azp": self._settings.client_id,
+            "iat": now,
+            "exp": now + expires_in,
+            "preferred_username": username,
+            "email": email,
+            "email_verified": True,
+            "realm_access": {"roles": roles},
+            "resource_access": {self._settings.client_id: {"roles": roles}},
+        }
+        return jwt.encode(
+            payload,
+            pem_priv,
+            algorithm="RS256",
+            headers={"kid": "agentspace-internal-key"},
+        )
 
     @property
     def expected_issuer(self) -> str:

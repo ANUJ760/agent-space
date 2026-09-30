@@ -21,6 +21,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { CreateProjectDialog } from "@/components/projects/create-project-dialog";
+import { ProtectedRoute } from "@/components/auth/protected-route";
 import { apiFetch } from "@/lib/api-client";
 import { Project } from "@/types/api";
 
@@ -59,7 +60,8 @@ export default function HomePage() {
   ).length;
 
   return (
-    <div className="space-y-8 max-w-7xl mx-auto">
+    <ProtectedRoute>
+      <div className="space-y-8 max-w-7xl mx-auto">
       {/* Page Title & Actions */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
@@ -292,6 +294,6 @@ export default function HomePage() {
           </CardContent>
         </Card>
       </div>
-    </div>
+    </ProtectedRoute>
   );
 }

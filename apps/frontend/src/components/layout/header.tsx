@@ -12,9 +12,9 @@ export function Header() {
     <header className="h-16 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 sticky top-0 z-20 flex items-center justify-between px-6">
       {/* Organization context / Switcher shell */}
       <div className="flex items-center gap-3">
-        <div className="flex items-center gap-2 px-3 py-1.5 rounded-md border bg-card text-sm font-medium text-foreground">
-          <Building2 className="w-4 h-4 text-muted-foreground" />
-          <span>Default Organization</span>
+        <div className="flex items-center gap-2 px-3 py-1.5 rounded-md border bg-card text-sm font-medium text-foreground shadow-sm">
+          <Building2 className="w-4 h-4 text-primary" />
+          <span className="font-semibold">{user?.organizationName || "Agent Space Workspace"}</span>
         </div>
       </div>
 
@@ -38,14 +38,14 @@ export function Header() {
         {/* User avatar & logout */}
         {isAuthenticated && user && (
           <div className="flex items-center gap-3 pl-2 border-l">
-            <div className="w-8 h-8 rounded-full bg-primary/10 text-primary font-semibold flex items-center justify-center text-xs">
+            <div className="w-8 h-8 rounded-full bg-primary/10 text-primary font-bold flex items-center justify-center text-xs shadow-inner">
               {user.username.substring(0, 2).toUpperCase()}
             </div>
             <div className="hidden lg:flex flex-col text-left">
-              <span className="text-xs font-medium text-foreground">
-                {user.username}
+              <span className="text-xs font-semibold text-foreground">
+                {user.displayName || user.username}
               </span>
-              <span className="text-[10px] text-muted-foreground font-mono">
+              <span className="text-[10px] text-muted-foreground font-mono font-medium">
                 {user.role}
               </span>
             </div>
