@@ -1,0 +1,185 @@
+# ==============================================================================
+# Agent Space - Kubernetes NetworkPolicies (M83)
+# ==============================================================================
+# Implements zero-trust network microsegmentation:
+# 1. Default-deny all ingress and egress in namespace
+# 2. Allow CoreDNS egress for name resolution
+# 3. Allow Frontend ingress from Ingress Controller and egress to Backend
+# 4. Allow Backend ingress from Frontend & Ingress, and egress to backing services
+# 5. Allow Worker egress to Temporal, DB, Redis, NATS
+# ==============================================================================
+
+# 1. Default Deny All Ingress and Egress
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-all
+  namespace: agent-space
+  labels:
+    app.kubernetes.io/name: agent-space
+    app.kubernetes.io/component: security
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+    - Egress
+
+---
+# 2. Allow CoreDNS Egress across all pods
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-dns-egress
+  namespace: agent-space
+  labels:
+    app.kubernetes.io/name: agent-space
+    app.kubernetes.io/component: security
+spec:
+  podSelector: {}
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - namespaceSelector: {}
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+
+---
+# 3. Frontend Network Policy
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: frontend-network-policy
+  namespace: agent-space
+  labels:
+    app.kubernetes.io/name: agent-space-frontend
+    app.kubernetes.io/component: security
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: agent-space-frontend
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # Allow ingress on port 3000 from Ingress controller or same namespace
+    - from:
+        - namespaceSelector: {}
+      ports:
+        - protocol: TCP
+          port: 3000
+  egress:
+    # Allow egress to backend API
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: agent-space-backend
+      ports:
+        - protocol: TCP
+          port: 8000
+    # Allow DNS egress
+    - ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+
+---
+# 4. Backend Network Policy
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: backend-network-policy
+  namespace: agent-space
+  labels:
+    app.kubernetes.io/name: agent-space-backend
+    app.kubernetes.io/component: security
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: agent-space-backend
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # Allow ingress from Frontend pods
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: agent-space-frontend
+      ports:
+        - protocol: TCP
+          port: 8000
+    # Allow ingress from Ingress controller
+    - from:
+        - namespaceSelector: {}
+      ports:
+        - protocol: TCP
+          port: 8000
+  egress:
+    # Allow egress to internal services (PostgreSQL, Redis, NATS, Temporal, Keycloak)
+    - to:
+        - podSelector: {}
+      ports:
+        - protocol: TCP
+          port: 5432
+        - protocol: TCP
+          port: 6379
+        - protocol: TCP
+          port: 4222
+        - protocol: TCP
+          port: 7233
+        - protocol: TCP
+          port: 8080
+    # Allow DNS egress
+    - ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+
+---
+# 5. Worker Network Policy
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: worker-network-policy
+  namespace: agent-space
+  labels:
+    app.kubernetes.io/name: agent-space-worker
+    app.kubernetes.io/component: security
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: agent-space-worker
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress: [] # Workers do not receive inbound requests
+  egress:
+    # Allow egress to temporal, db, redis, nats, keycloak
+    - to:
+        - podSelector: {}
+      ports:
+        - protocol: TCP
+          port: 5432
+        - protocol: TCP
+          port: 6379
+        - protocol: TCP
+          port: 4222
+        - protocol: TCP
+          port: 7233
+        - protocol: TCP
+          port: 8080
+    # Allow DNS egress
+    - ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53

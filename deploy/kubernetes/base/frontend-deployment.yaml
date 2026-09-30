@@ -24,6 +24,7 @@ spec:
         app.kubernetes.io/component: frontend
         app.kubernetes.io/part-of: agent-space
     spec:
+      serviceAccountName: agent-space-frontend
       securityContext:
         runAsNonRoot: true
         runAsUser: 10001
@@ -44,7 +45,7 @@ spec:
                 name: agent-space-config
           securityContext:
             allowPrivilegeEscalation: false
-            readOnlyRootFilesystem: false
+            readOnlyRootFilesystem: true
             capabilities:
               drop:
                 - ALL
@@ -74,6 +75,10 @@ spec:
           volumeMounts:
             - name: tmp
               mountPath: /tmp
+            - name: next-cache
+              mountPath: /app/.next/cache
       volumes:
         - name: tmp
+          emptyDir: {}
+        - name: next-cache
           emptyDir: {}

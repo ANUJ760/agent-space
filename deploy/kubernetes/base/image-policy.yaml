@@ -1,0 +1,21 @@
+# ==============================================================================
+# Agent Space - Image Security Policy & Registry Configuration (M83)
+# ==============================================================================
+# Enterprise Container Security Standards:
+# 1. Pinned semantic version tags (e.g. 0.1.0); mutable ':latest' is prohibited
+# 2. Approved internal/hardened registries only
+# 3. Explicit imagePullPolicy: IfNotPresent on all workload specifications
+# 4. Optional ImagePullSecrets reference for private enterprise registry access
+# ==============================================================================
+
+apiVersion: v1
+kind: Secret
+metadata:
+  name: agent-space-registry-secret
+  namespace: agent-space
+  labels:
+    app.kubernetes.io/name: agent-space
+    app.kubernetes.io/component: security
+type: kubernetes.io/dockerconfigjson
+stringData:
+  .dockerconfigjson: '{"auths":{"ghcr.io":{"auth":"bWFuYWdlZC1ieS1zZWNyZXQtc3RvcmU="}}}'

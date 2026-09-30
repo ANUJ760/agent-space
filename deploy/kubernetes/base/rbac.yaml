@@ -1,0 +1,76 @@
+# ==============================================================================
+# Agent Space - Service Accounts and RBAC (M83)
+# ==============================================================================
+# Security features:
+# - Dedicated service accounts for each workload
+# - automountServiceAccountToken: false to prevent API token theft
+# - Strictly scoped Role and RoleBinding with minimal permissions
+# ==============================================================================
+
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: agent-space-backend
+  namespace: agent-space
+  labels:
+    app.kubernetes.io/name: agent-space-backend
+    app.kubernetes.io/component: rbac
+automountServiceAccountToken: false
+
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: agent-space-worker
+  namespace: agent-space
+  labels:
+    app.kubernetes.io/name: agent-space-worker
+    app.kubernetes.io/component: rbac
+automountServiceAccountToken: false
+
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: agent-space-frontend
+  namespace: agent-space
+  labels:
+    app.kubernetes.io/name: agent-space-frontend
+    app.kubernetes.io/component: rbac
+automountServiceAccountToken: false
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: agent-space-app-role
+  namespace: agent-space
+  labels:
+    app.kubernetes.io/name: agent-space
+    app.kubernetes.io/component: rbac
+rules:
+  # Minimal permission to read configmaps for live reload
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get", "watch", "list"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: agent-space-app-rolebinding
+  namespace: agent-space
+  labels:
+    app.kubernetes.io/name: agent-space
+    app.kubernetes.io/component: rbac
+subjects:
+  - kind: ServiceAccount
+    name: agent-space-backend
+    namespace: agent-space
+  - kind: ServiceAccount
+    name: agent-space-worker
+    namespace: agent-space
+roleRef:
+  kind: Role
+  name: agent-space-app-role
+  apiGroup: rbac.authorization.k8s.io

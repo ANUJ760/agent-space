@@ -24,6 +24,7 @@ spec:
         app.kubernetes.io/component: api
         app.kubernetes.io/part-of: agent-space
     spec:
+      serviceAccountName: agent-space-backend
       securityContext:
         runAsNonRoot: true
         runAsUser: 10001
