@@ -1,174 +1,289 @@
 # Agent Space
 
-> A modular, self-hostable collaboration platform where human engineering teams and autonomous AI agents collaborate on software and complex projects.
+> **An enterprise operating system for autonomous AI agents and human software engineering teams.**  
+> Pair program, orchestrate multi-agent pipelines, enforce zero-trust security boundaries, and collaborate seamlessly in real time.
 
 ---
 
-## 1. Overview
+## 1. The Core Idea & Philosophy
 
-**Agent Space** is not another chatbot wrapper or standalone prompt playground. It is an **operating system for human + agent work**.
+Modern AI coding tools are predominantly isolated chatbots, disposable code generators, or fragile single-turn prompt wrappers. They lack **state persistence**, **concurrency control**, **Git isolation**, and **peer parity with human engineers**.
 
-It provides:
-- **Multi-Tenant Collaboration**: Organizations, projects, role-based access control (RBAC), and team members.
-- **Human & Agent Parity**: AI agents act as full team members capable of being assigned tasks, collaborating on Git repositories, raising review requests, and handing off execution.
-- **Durable Workflow Execution**: Powered by Temporal for orchestrating resilient, long-running agent loops that survive restarts and failures.
-- **Strict Concurrency Guarantees**: PostgreSQL row-level locks, optimistic versioning, idempotency keys, and transactional outboxes.
-- **Sandboxed Agent Tools**: Isolated Docker / gVisor environments with network and resource governance.
-- **Shared Project Memory**: Semantic vector search via Qdrant for project history, decisions, and codebase context.
-- **Realtime Collaboration**: Bidirectional WebSockets backed by NATS JetStream and Redis.
+**Agent Space** treats autonomous AI agents as **first-class peers** within an engineering organization:
+- **Equal Peer Collaboration**: AI agents can be assigned tasks, raise review requests, push to dedicated Git worktrees, and hand off execution to human engineers with full context preservation.
+- **Durable Task Lifecycles**: Workflows are managed by **Temporal**, eliminating fragile long-lived HTTP connections and ensuring tasks survive restarts, network partitions, and pod failures.
+- **Strict Concurrency Guarantees**: Multi-tenant database integrity enforced via PostgreSQL row-level locks, optimistic concurrency versioning, and transactional outboxes.
+- **Sandboxed Tool Containment**: All code execution, shell commands, and package installations take place inside isolated Docker or gVisor sandbox runtimes with zero-network egress by default.
+- **Zero-Trust Identity**: Strictly separated member authentication and a hardened, protected Administrator Portal with zero self-registration options.
 
 ---
 
-## 2. Global Architecture
+## 2. System Architecture
 
-```text
-                         ┌─────────────────────────┐
-                         │       Next.js UI        │
-                         │ TS + Tailwind + shadcn  │
-                         └────────────┬────────────┘
-                                      │ HTTPS / WS
-                                      ▼
-                         ┌─────────────────────────┐
-                         │        FastAPI          │
-                         │ API + Auth + Services   │
-                         └──────┬─────────┬────────┘
-                                │         │
-                                ▼         ▼
-                         PostgreSQL      Redis
-                         truth/state     cache/ephemeral
-                                │
-                                ▼
-                         ┌──────────────┐
-                         │   NATS       │
-                         │  JetStream   │
-                         └──────┬───────┘
-                                │
-                                ▼
-                         ┌──────────────┐
-                         │   Temporal   │
-                         │   Workflows  │
-                         └──────┬───────┘
-                                │
-                         ┌──────┴──────┐
-                         ▼             ▼
-                    Agent Workers   Tool Gateway
-                         │             │
-                         ▼             ▼
-                    LangGraph       Sandbox
-                         │        Docker/gVisor
-                         ▼
-                    Model Gateway
-                    Ollama/vLLM
+### High-Level Component Topology
 
-               ┌────────────┬────────────┬────────────┐
-               ▼            ▼            ▼            ▼
-             Qdrant      SeaweedFS     Gitea      Keycloak
-             memory      artifacts      Git        identity
-```
+```mermaid
+flowchart TD
+    subgraph ClientLayer["Frontend Experience (Port 3000)"]
+        UI["Next.js 14 Web Interface"]
+        ThreeCanvas["Three.js 3D Animated Canvas"]
+        WSClient["WebSocket Real-Time Feed"]
+    end
 
-### Core Architecture Invariants
+    subgraph APILayer["API & Security Gateway (Port 8000)"]
+        FastAPI["FastAPI REST Engine"]
+        AuthModule["RBAC & OIDC Auth Layer"]
+        ProtectedAdmin["Protected Admin Gateway"]
+    end
 
-- **PostgreSQL**: Authoritative single source of truth for all application state.
-- **Temporal**: Durable workflow execution engine; eliminates fragile long-running HTTP connections.
-- **LangGraph**: Cognitive agent reasoning graphs and tool decision loops.
-- **NATS JetStream**: High-throughput distributed event bus.
-- **WebSocket**: Live updates and real-time multiplayer feeds to browser clients.
-- **Redis**: Ephemeral presence, fast caching, and session tracking.
-- **Qdrant**: High-performance semantic vector database for project memory.
-- **Gitea**: Dedicated Git server managing isolated branches and worktrees per agent.
-- **SeaweedFS / S3**: Immutable object storage for artifacts, patches, and logs.
-- **Keycloak**: OpenID Connect / OAuth2 identity and authorization server.
-- **Tool Gateway**: Authorization and validation boundary for all agent capabilities.
-- **Sandbox (Docker / gVisor)**: Untrusted code and command execution barrier.
+    subgraph StateLayer["State & Messaging Backbone"]
+        Postgres[("PostgreSQL 16\nAuthoritative State")]
+        Redis[("Redis 7\nCache & Leases")]
+        NATS["NATS JetStream\nEvent Bus"]
+    end
 
----
+    subgraph OrchestrationLayer["Agent Execution & Workflow Engine"]
+        Temporal["Temporal Workflow Cluster\n(Port 7233)"]
+        Workers["Agent Worker Loop\n(LangGraph Runtimes)"]
+    end
 
-## 3. Repository Structure
+    subgraph ToolingLayer["Sandboxed Tool & Storage Providers"]
+        Sandbox["Tool Gateway\n(Docker / gVisor Containment)"]
+        Gitea["Gitea Git Server\n(Isolated Worktrees)"]
+        S3["SeaweedFS / S3\n(CAS Artifact Storage)"]
+        Qdrant["Qdrant Vector DB\n(Semantic Project Memory)"]
+    end
 
-```text
-agent-space/
-├── apps/
-│   ├── backend/         # FastAPI REST API, auth, and database services
-│   └── frontend/        # Next.js collaborative UI
-├── agents/              # Autonomous agent graphs (Coding, Research, Testing, Review, Vision)
-├── packages/            # Shared Python and TypeScript libraries, schemas, DB models
-├── infrastructure/      # Docker Compose, Kubernetes manifests, OpenTofu scripts
-├── docs/                # Architecture specifications, API documentation, runbooks
-├── tests/               # Test suites (Unit, Integration, Concurrency, Temporal, E2E)
-├── README.md            # Project overview and onboarding
-├── LICENSE              # Apache 2.0 open-source license
-├── .gitignore           # Git ignore rules for build artifacts and environments
-├── .dockerignore        # Container build exclude rules
-├── .env.example         # Centralized configuration reference
-├── pyproject.toml       # Python packaging, dependency, and tool settings
-├── package.json         # Node workspace configuration
-└── Makefile             # Developer automation commands
+    UI -->|HTTPS| FastAPI
+    WSClient <-->|WSS| FastAPI
+    FastAPI --> AuthModule
+    AuthModule --> ProtectedAdmin
+
+    FastAPI --> Postgres
+    FastAPI --> Redis
+    FastAPI --> NATS
+
+    NATS --> Temporal
+    Temporal --> Workers
+    Workers --> Sandbox
+    Workers --> Gitea
+    Workers --> S3
+    Workers --> Qdrant
+    Workers --> Postgres
 ```
 
 ---
 
-## 4. Getting Started
+### Human-in-the-Loop Multi-Agent Task Pipeline
 
-### Prerequisites
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Human as Human Engineer / Lead
+    participant API as FastAPI Gateway
+    participant DB as PostgreSQL State
+    participant WF as Temporal Engine
+    participant Agent as Autonomous AI Agent
+    participant Box as Sandboxed Runtime
+    participant Git as Gitea Repo
 
-- **Python**: `>= 3.11`
-- **Node.js**: `>= 20.0` and **npm**: `>= 10.0`
-- **Docker & Docker Compose**: for local services
+    Human->>API: Create Task ("Implement Feature X")
+    API->>DB: Persist Task (Status: TODO, Version: 1)
+    Human->>API: Assign Task to Agent
+    API->>WF: Dispatch Agent Execution Signal
+    WF->>Agent: Initialize Cognitive Graph (LangGraph)
+    Agent->>Git: Branch & Create Isolated Worktree
+    Agent->>Box: Execute Tests & Generate Patch
+    Box-->>Agent: Verification Succeeded
+    Agent->>DB: Update Task (Status: REVIEW, Artifacts: Attached)
+    Agent->>Human: Trigger Review Request Notification
+    Human->>API: Review Diff & Approve Task
+    API->>Git: Merge Worktree to Main
+    API->>DB: Transition Task (Status: DONE)
+```
 
-### Environment Setup
+---
 
-1. Copy the environment template:
-   ```bash
-   cp .env.example .env
-   ```
-2. Adjust configuration parameters in `.env` as required for your local setup.
-   > **Detailed Walkthrough**: See [`docs/setup_guide.md`](docs/setup_guide.md) for production placeholder values, database seeding, credentials matrix, and 3-tab workspace instructions.
+## 3. Technology Stack & Architectural Decisions
 
-### Development Commands
+### Layer-by-Layer Tech Stack
 
-Agent Space includes a top-level `Makefile` for developer workflow:
+| Operational Layer | Technology | Primary Role | Key Configuration |
+| :--- | :--- | :--- | :--- |
+| **Frontend Framework** | **Next.js 14 (App Router)** | Server & Client Components, Responsive UI | React 18, TypeScript 5.5 |
+| **3D Animations** | **Three.js** | Ambient node network & interactive auth core | WebGL, responsive orbital physics |
+| **Styling & Design** | **Tailwind CSS + shadcn/ui** | Obsidian dark aesthetic, curved & sharp primitives | Obsidian theme, zero radius dashboard |
+| **Backend Framework** | **FastAPI** | High-performance asynchronous REST API | Python 3.11+, Pydantic v2 |
+| **Relational Database** | **PostgreSQL 16** | Authoritative single source of truth | AsyncPG, SQLAlchemy 2.0, Alembic |
+| **Distributed Cache** | **Redis 7** | Presence, optimistic lease locks, ephemeral cache | Key-value store, Pub/Sub |
+| **Event Messaging** | **NATS JetStream** | Real-time domain event streaming | At-least-once delivery, consumer groups |
+| **Workflow Engine** | **Temporal** | Durable agent task orchestration & retry handling | Task queues, workflows, signals |
+| **Agent Reasoning** | **LangGraph** | Multi-agent stateful cognitive graphs | Cyclical reasoning, tool execution |
+| **Tool Sandbox** | **Docker / gVisor** | Untrusted command & code execution containment | Zero egress, CPU/memory limits |
+| **Git Management** | **Gitea** | Isolated agent worktrees and branch management | REST API, Webhooks |
+| **Artifact Store** | **SeaweedFS / S3** | Content-addressable storage (CAS) for diffs/logs | S3-compatible API |
+| **Semantic Memory** | **Qdrant** | High-dimensional vector search over project memory | Cosine similarity embeddings |
+| **Identity Provider** | **Keycloak 24 / OIDC** | Enterprise SSO, RBAC roles, JWT signing | OpenID Connect, RS256 JWKS |
+
+---
+
+### Architectural Trade-Off Analysis
+
+| Architectural Decision | Alternative Considered | Why Agent Space Chose This |
+| :--- | :--- | :--- |
+| **Temporal Workflows** | Celery / RabbitMQ / Cron | Celery cannot handle multi-hour pause/resume states, human-in-the-loop approvals, or survive orchestrator restarts without complex custom state machines. |
+| **PostgreSQL 16** | MongoDB / DynamoDB | Strict relational ACID transactions, `SELECT ... FOR UPDATE` row locks, and transactional outboxes prevent race conditions during agent task claims. |
+| **Three.js Visuals** | Pure CSS animations | Three.js provides dynamic GPU-accelerated interactive 3D particle nodes that reflect real-time collaboration between human and agent entities. |
+| **Isolated Admin Portal** | Shared login with dropdown | Dedicated `/admin/login` strictly rejects non-admin accounts and has zero self-registration options to prevent privilege escalation. |
+| **Gitea Worktrees** | Direct commits to main | Prevents concurrent AI agents from stepping on human code; each agent operates on an ephemeral, sandboxed branch. |
+
+---
+
+## 4. Concise Setup Guide (Quickstart)
+
+Follow these 5 steps to get the full stack running locally.
+
+### Step 1: Clone Repository & Check Prerequisites
+Ensure you have **Python 3.11+**, **Node.js 20+**, and **Podman** (or Docker) installed:
+```bash
+git clone https://github.com/ANUJ760/agent-space.git
+cd agent-space
+```
+
+### Step 2: Configure Environment
+Copy the development environment template:
+```bash
+cp .env.example .env
+```
+*(For production setups with custom secrets, see [`docs/setup_guide.md`](docs/setup_guide.md)).*
+
+### Step 3: Start Database & Redis
+Start PostgreSQL 16 and Redis 7 in rootless containers:
+```bash
+# Using Podman:
+podman run -d --name agentspace-postgres -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=agentspace -p 5432:5432 postgres:16-alpine
+podman run -d --name agentspace-redis -p 6379:6379 redis:7-alpine
+
+# Or using Docker Compose:
+# docker compose up -d postgres redis
+```
+
+### Step 4: Apply Migrations & Seed Database
+Initialize schemas and populate default organizations, RBAC personas, agents, and milestone tasks:
+```bash
+# Apply schema migrations
+PYTHONPATH=apps/backend python3 -m alembic upgrade head
+
+# Run idempotent database seeding
+PYTHONPATH=apps/backend python3 scripts/seed_database.py
+```
+
+### Step 5: Launch Backend & Frontend
+
+**Terminal 1 (Backend API):**
+```bash
+PYTHONPATH=apps/backend:. python3 -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+```
+
+**Terminal 2 (Frontend UI):**
+```bash
+npm install
+npm run dev --workspace=@agent-space/frontend
+```
+
+Open **[http://localhost:3000](http://localhost:3000)** in your browser.
+
+---
+
+## 5. Seeded Credentials & Access Matrix
+
+The seeding script provisions the following accounts:
+
+### 1. Protected Administrator Portal
+- **URL**: [http://localhost:3000/admin/login](http://localhost:3000/admin/login)
+- **Direct Protected Endpoint**: `POST /api/v1/auth/admin/login`
+
+| Username | Password | Role | Constraints |
+| :--- | :--- | :--- | :--- |
+| **`admin`** | `AdminPassword123!` | `ORG_ADMIN` | **Strictly no signup options.** Cannot authenticate via standard `/login` route. |
+
+### 2. Standard Workspace Members
+- **URL**: [http://localhost:3000/login](http://localhost:3000/login)
+- **Direct Endpoint**: `POST /api/v1/auth/login`
+
+| Username | Password | Role | Permissions |
+| :--- | :--- | :--- | :--- |
+| **`lead`** | `LeadPassword123!` | `PROJECT_OWNER` | Full project management, task creation, approval gates |
+| **`developer`** | `DeveloperPassword123!` | `MEMBER` | Claim tasks, pair program with AI agents, review code |
+| **`auditor`** | `AuditorPassword123!` | `VIEWER` | Read-only inspection of audit trail and compliance logs |
+
+### 3. Autonomous AI Agents
+- **`DevOps-Agent-01`** (`devops-agent-01`): Powered by `claude-3-5-sonnet`, equipped with `ci_cd`, `code_review`, `container_orchestration`, and `security_scanning` capabilities.
+
+---
+
+## 6. Frontend Navigation & Workspace Features
+
+- **Dark Obsidian Aesthetic**: Deep carbon palette (`--background: 240 12% 4%`) with sharp technical cards and slim navigation headers (`h-11`).
+- **Curved High-Contrast Auth**: Frosted glassmorphism (`rounded-[32px]`), electric glow highlights, and minimal text.
+- **Three.js Interactive Visuals**:
+  - `AuthThreeAnimation.tsx`: Rotating 3D holographic collaboration core with interactive mouse physics and dual orbital rings (Cyan for humans, Violet for AI, Amber for Admin).
+  - `ThreeTransitionCanvas.tsx`: Ambient route-transition wave acceleration.
+- **3-Tab Project Interface**:
+  - **Tab 1: Collaborators**: Combined roster of human engineers and active AI agents.
+  - **Tab 2: Progress (Middle Tab)**: Visual sprint pipeline with color-coded circular timeline markers:
+    - **Cyan Marker (`UserCheck`)**: Human engineer tasks.
+    - **Violet Marker (`Bot`)**: Autonomous AI agent tasks.
+  - **Tab 3: Deliverables**: Filterable task board by status (`TODO`, `IN_PROGRESS`, `REVIEW`, `DONE`).
+
+---
+
+## 7. Container Build & Docker Support
+
+Build the hardened production container:
 
 ```bash
-# Display available commands
-make help
+# Build the default production backend image
+podman build -t agent-space:backend --target backend .
 
-# Run test suite
-make test
-
-# Run code linters (Ruff & Mypy)
-make lint
-
-# Automatically format code
-make format
-
-# Run full verification check (lint + test)
-make check
-
-# Clean temporary caches and build artifacts
-make clean
+# Or build the frontend image
+podman build -t agent-space:frontend --target frontend .
 ```
 
 ---
 
-## 5. Modular Build Plan & Execution Gates
+## 8. Verification & Test Suites
 
-Agent Space follows a strict **modular execution model**: each module is implemented independently, verified through automated tests, and gated by human review before proceeding to the next.
+Agent Space maintains comprehensive test coverage across both backend and frontend:
 
-1. **Foundation**: `M00` (Repo Contract) → `M01` (Config) → `M02` (FastAPI) → `M03` (Postgres) → `M04` (Alembic) → `M05` (Health)
-2. **Auth & RBAC**: `M06` (Keycloak) → `M07` (Users/Orgs) → `M08` (RBAC)
-3. **Core Application**: `M09` (Projects) → `M10` (Members) → `M11` (Agent Registry) → `M12` (Tasks) → `M13` (State Machine) → `M14` (Dependencies) → `M15` (Assignment)
-4. **Concurrency**: `M16` (Optimistic Locking) → `M17` (Row Locks) → `M18` (Idempotency) → `M19` (Transactional Outbox)
-5. **Frontend**: `M20` (Next.js Shell) → `M21` (Auth UI) → `M22` (Dashboard) → `M23` (Project UI) → `M24` (Kanban UI)
-6. **Realtime & Messaging**: `M25` (Redis) → `M26` (NATS JetStream) → `M27` (WebSocket Gateway)
-7. **Workflows**: `M28` (Temporal Client) → `M29` (Worker Infra) → `M30` (TaskWorkflow) → `M31` (Signals) → `M32` (Recovery)
-8. **Agents & Tools**: `M33` - `M46` (Agent Protocols, LangGraph Runtime, Coding/Review/Testing/Vision Agents, Tool Gateway, Sandbox Isolation)
-9. **Git, Storage & Memory**: `M47` - `M52` (Gitea, Workspaces, Artifacts, Qdrant)
-10. **Human-in-the-Loop Collaboration**: `M53` - `M57` (Takeover, Handoff, Activity Feed, Progress)
-11. **Scheduling & DAG**: `M58` - `M61` (Capability Matching, Task DAG Execution, Scheduling Explainability)
-12. **Security, Observability & Verification**: `M62` - `M90` (Audits, OpenTelemetry, Prometheus, Full Test Suites, Deployment)
+```bash
+# Run full backend test suite (553 passed)
+python3 -m pytest
+
+# Run frontend tests (25 passed across 6 suites)
+npm run test --workspace=@agent-space/frontend
+
+# Verify TypeScript compilation (0 errors)
+npm run type-check --workspace=@agent-space/frontend
+```
 
 ---
 
-## 6. License
+## 9. Comprehensive Documentation Index
+
+For in-depth operational specifications, consult the complete documentation suite:
+
+- [`docs/setup_guide.md`](docs/setup_guide.md) — Comprehensive setup, production environment placeholders, and teardown runbook.
+- [`docs/architecture.md`](docs/architecture.md) — System architecture invariants and state machine guarantees.
+- [`docs/security.md`](docs/security.md) — Security boundaries, RBAC matrix, and threat modeling.
+- [`docs/concurrency.md`](docs/concurrency.md) — Optimistic locking, row-level locks, and idempotency guarantees.
+- [`docs/workflows.md`](docs/workflows.md) — Temporal workflow topology and recovery mechanisms.
+- [`docs/agents.md`](docs/agents.md) — Multi-agent roles, LangGraph cognitive graphs, and protocols.
+- [`docs/deployment.md`](docs/deployment.md) — Kubernetes manifests and OpenTofu infrastructure modules (AWS & Azure).
+- [`docs/database.md`](docs/database.md) — PostgreSQL schema specifications and migration policies.
+
+---
+
+## 10. License
 
 This project is licensed under the [Apache 2.0 License](LICENSE).
