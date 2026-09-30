@@ -102,23 +102,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         localStorage.setItem(USER_KEY, JSON.stringify(authenticatedUser));
         router.push("/");
       } catch (err) {
-        // Fallback for isolated offline/mock testing if backend unreachable
-        const fallbackRole = role || "ORG_ADMIN";
-        const fallbackToken = `dev-token-${username.trim()}-${Date.now()}`;
-        const fallbackUser: AuthUser = {
-          id: `usr-${username.trim()}`,
-          username: username.trim(),
-          email: `${username.trim()}@agentspace.local`,
-          role: fallbackRole,
-          displayName: username.trim(),
-          organizationName: "Default Organization",
-        };
-
-        setToken(fallbackToken);
-        setUser(fallbackUser);
-        localStorage.setItem(TOKEN_KEY, fallbackToken);
-        localStorage.setItem(USER_KEY, JSON.stringify(fallbackUser));
-        router.push("/");
+        throw err;
       } finally {
         setIsLoading(false);
       }
@@ -172,7 +156,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             password: params.password?.trim() || undefined,
             display_name: params.displayName?.trim() || params.username.trim(),
             organization_name: params.organizationName?.trim() || undefined,
-            role: params.role || "ORG_ADMIN",
           }),
         });
 
@@ -192,23 +175,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         localStorage.setItem(USER_KEY, JSON.stringify(authenticatedUser));
         router.push("/");
       } catch (err) {
-        // Fallback for isolated tests
-        const fallbackRole = params.role || "ORG_ADMIN";
-        const fallbackToken = `dev-token-${params.username.trim()}-${Date.now()}`;
-        const fallbackUser: AuthUser = {
-          id: `usr-${params.username.trim()}`,
-          username: params.username.trim(),
-          email: params.email.trim(),
-          role: fallbackRole,
-          displayName: params.displayName || params.username.trim(),
-          organizationName: params.organizationName || `${params.username.trim()}'s Space`,
-        };
-
-        setToken(fallbackToken);
-        setUser(fallbackUser);
-        localStorage.setItem(TOKEN_KEY, fallbackToken);
-        localStorage.setItem(USER_KEY, JSON.stringify(fallbackUser));
-        router.push("/");
+        throw err;
       } finally {
         setIsLoading(false);
       }

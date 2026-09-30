@@ -2,43 +2,30 @@
 
 import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { useAuth } from "@/lib/auth-context";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
+import { AuthThreeAnimation } from "@/components/canvas/AuthThreeAnimation";
 import {
   Shield,
-  KeyRound,
   LogIn,
   AlertCircle,
-  Building2,
-  UserCheck,
   UserPlus,
-  Lock,
-  Crown,
-  Wrench,
-  Code,
   Eye,
   EyeOff,
-  CheckCircle2,
+  User,
+  Mail,
+  Lock,
+  Building2,
   ArrowRight,
 } from "lucide-react";
 
-type AuthMode = "signin" | "admin" | "signup";
+type AuthMode = "signin" | "signup";
 
 export default function LoginPage() {
-  const { login, adminLogin, signup, isLoading, isAuthenticated } = useAuth();
+  const { login, signup, isLoading, isAuthenticated } = useAuth();
   const router = useRouter();
   const [mode, setMode] = useState<AuthMode>("signin");
 
-  // Redirect if session already exists
   useEffect(() => {
     if (isAuthenticated) {
       router.push("/");
@@ -46,108 +33,34 @@ export default function LoginPage() {
   }, [isAuthenticated, router]);
 
   // Sign in state
-  const [username, setUsername] = useState("admin_a");
-  const [password, setPassword] = useState("password123");
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
 
   // Sign up state
+  const [signupFullName, setSignupFullName] = useState("");
   const [signupUsername, setSignupUsername] = useState("");
   const [signupEmail, setSignupEmail] = useState("");
   const [signupPassword, setSignupPassword] = useState("");
   const [signupOrg, setSignupOrg] = useState("");
-  const [signupRole, setSignupRole] = useState("ORG_ADMIN");
+  const [showSignupPassword, setShowSignupPassword] = useState(false);
 
   const [error, setError] = useState<string | null>(null);
-
-  // Quick Persona Presets for instant testing
-  const personas = [
-    {
-      name: "Org Admin",
-      username: "admin_a",
-      role: "ORG_ADMIN",
-      icon: Crown,
-      color: "border-amber-500/40 bg-amber-500/10 text-amber-600 dark:text-amber-400",
-      description: "Full platform & tenant authority",
-    },
-    {
-      name: "Project Lead",
-      username: "lead_dev",
-      role: "PROJECT_OWNER",
-      icon: Wrench,
-      color: "border-blue-500/40 bg-blue-500/10 text-blue-600 dark:text-blue-400",
-      description: "Project management & task workflows",
-    },
-    {
-      name: "Developer",
-      username: "alice_coder",
-      role: "MEMBER",
-      icon: Code,
-      color: "border-emerald-500/40 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
-      description: "Code generation, PRs & task execution",
-    },
-    {
-      name: "Auditor",
-      username: "auditor_bob",
-      role: "VIEWER",
-      icon: Eye,
-      color: "border-purple-500/40 bg-purple-500/10 text-purple-600 dark:text-purple-400",
-      description: "Read-only audit & observability",
-    },
-  ];
-
-  const roleDescriptions: Record<string, { label: string; desc: string }> = {
-    ORG_ADMIN: {
-      label: "Organization Administrator",
-      desc: "Full administrative control over organization settings, member roles, security, and projects.",
-    },
-    PROJECT_OWNER: {
-      label: "Project Architect & Lead",
-      desc: "Manage engineering repositories, assign tasks to agents, and configure workflow pipelines.",
-    },
-    MEMBER: {
-      label: "Core Developer",
-      desc: "Collaborate on tasks, review AI agent code generation, trigger verification suites.",
-    },
-    VIEWER: {
-      label: "Observer & Auditor",
-      desc: "Read-only access to progress metrics, telemetry dashboards, and audit event streams.",
-    },
-  };
-
-  const handleSelectPersona = (p: typeof personas[0]) => {
-    setUsername(p.username);
-    setPassword("password123");
-    setError(null);
-  };
 
   const handleStandardLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!username.trim()) {
-      setError("Please enter a username or email");
+      setError("Enter your username or email");
       return;
     }
     setError(null);
     try {
       await login(username.trim(), password);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to authenticate session");
-    }
-  };
-
-  const handleAdminLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!username.trim()) {
-      setError("Please enter administrator username or email");
-      return;
-    }
-    setError(null);
-    try {
-      await adminLogin(username.trim(), password);
-    } catch (err) {
       setError(
         err instanceof Error
           ? err.message
-          : "Access denied. Administrator privileges required."
+          : "Invalid credentials. Please verify your details."
       );
     }
   };
@@ -155,314 +68,166 @@ export default function LoginPage() {
   const handleSignupSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!signupUsername.trim() || !signupEmail.trim()) {
-      setError("Username and corporate email are required");
+      setError("Username and email are required");
       return;
     }
     setError(null);
     try {
       await signup({
+        displayName: signupFullName.trim() || undefined,
         username: signupUsername.trim(),
         email: signupEmail.trim(),
         password: signupPassword.trim() || undefined,
         organizationName: signupOrg.trim() || undefined,
-        role: signupRole,
       });
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Registration failed");
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Account creation failed. Please check your information."
+      );
     }
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center p-4 bg-muted/20">
-      <div className="w-full max-w-lg space-y-6">
-        {/* Brand Header */}
-        <div className="text-center space-y-2">
-          <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-primary text-primary-foreground font-black text-xl shadow-lg shadow-primary/20">
-            A
+    <div className="relative min-h-screen flex items-center justify-center p-6 sm:p-12 overflow-hidden">
+      <div className="w-full max-w-xl space-y-8 relative z-10">
+        {/* Main Curved Card with Generous Breathing Space */}
+        <div className="rounded-[32px] border border-border/60 bg-card/75 backdrop-blur-2xl shadow-2xl ring-1 ring-white/10 p-8 sm:p-12 space-y-8 transition-all">
+          {/* Header & Three.js 3D Interactive Animation */}
+          <div className="flex flex-col items-center text-center space-y-4">
+            <div className="relative p-1">
+              <AuthThreeAnimation mode={mode} size={130} />
+            </div>
+
+            <div className="space-y-1">
+              <h1 className="text-3xl font-extrabold tracking-tight text-foreground">
+                Agent Space
+              </h1>
+              <p className="text-xs font-mono tracking-wider uppercase text-muted-foreground">
+                Autonomous Collaboration
+              </p>
+            </div>
+
+            {/* Curved Pill Mode Switcher */}
+            <div className="inline-flex p-1.5 rounded-full bg-secondary/50 border border-border/50 shadow-inner">
+              <button
+                type="button"
+                onClick={() => {
+                  setMode("signin");
+                  setError(null);
+                }}
+                className={`py-2 px-6 rounded-full text-xs font-semibold transition-all flex items-center gap-2 ${
+                  mode === "signin"
+                    ? "bg-primary text-primary-foreground shadow-md"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                <LogIn className="w-3.5 h-3.5" />
+                <span>Sign In</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setMode("signup");
+                  setError(null);
+                }}
+                className={`py-2 px-6 rounded-full text-xs font-semibold transition-all flex items-center gap-2 ${
+                  mode === "signup"
+                    ? "bg-primary text-primary-foreground shadow-md"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                <UserPlus className="w-3.5 h-3.5" />
+                <span>Sign Up</span>
+              </button>
+            </div>
           </div>
-          <h1 className="text-3xl font-extrabold tracking-tight text-foreground">
-            Agent Space
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            Autonomous AI & Human Software Engineering Collaboration Platform
-          </p>
-        </div>
 
-        {/* Mode Navigation Tabs */}
-        <div className="grid grid-cols-3 p-1 rounded-xl bg-muted border text-xs font-semibold">
-          <button
-            type="button"
-            onClick={() => {
-              setMode("signin");
-              setError(null);
-            }}
-            className={`py-2 px-3 rounded-lg transition-all flex items-center justify-center gap-1.5 ${
-              mode === "signin"
-                ? "bg-card text-foreground shadow-sm"
-                : "text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            <LogIn className="w-3.5 h-3.5" />
-            <span>Sign In</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => {
-              setMode("admin");
-              setError(null);
-            }}
-            className={`py-2 px-3 rounded-lg transition-all flex items-center justify-center gap-1.5 ${
-              mode === "admin"
-                ? "bg-card text-foreground shadow-sm"
-                : "text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            <Shield className="w-3.5 h-3.5 text-primary" />
-            <span>Admin Portal</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => {
-              setMode("signup");
-              setError(null);
-            }}
-            className={`py-2 px-3 rounded-lg transition-all flex items-center justify-center gap-1.5 ${
-              mode === "signup"
-                ? "bg-card text-foreground shadow-sm"
-                : "text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            <UserPlus className="w-3.5 h-3.5" />
-            <span>Sign Up</span>
-          </button>
-        </div>
-
-        {/* Main Auth Card */}
-        <Card className="shadow-xl border">
+          {/* Minimal Error Message */}
           {error && (
-            <div className="mx-6 mt-6 flex items-start gap-3 p-3 rounded-lg bg-destructive/10 text-destructive text-sm border border-destructive/20 animate-in fade-in duration-200">
-              <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />
+            <div className="flex items-center gap-3 p-4 rounded-2xl bg-destructive/10 text-destructive text-xs border border-destructive/20 animate-in fade-in duration-200">
+              <AlertCircle className="w-4 h-4 shrink-0" />
               <div className="flex-1 font-medium">{error}</div>
             </div>
           )}
 
-          {/* 1. STANDARD SIGN IN */}
+          {/* 1. SIGN IN FORM */}
           {mode === "signin" && (
-            <form onSubmit={handleStandardLogin}>
-              <CardHeader className="space-y-1">
-                <CardTitle className="text-xl font-bold">Sign In to Your Workspace</CardTitle>
-                <CardDescription>
-                  Enter your credentials or select an RBAC persona to collaborate with autonomous agents.
-                </CardDescription>
-              </CardHeader>
-
-              <CardContent className="space-y-4">
-                {/* Quick Persona Selector */}
+            <form onSubmit={handleStandardLogin} className="space-y-6">
+              <div className="space-y-5">
                 <div className="space-y-2">
-                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center justify-between">
-                    <span>Quick Select Persona (RBAC)</span>
-                    <span className="text-[10px] text-muted-foreground lowercase">1-click switch</span>
-                  </label>
-                  <div className="grid grid-cols-2 gap-2">
-                    {personas.map((p) => {
-                      const Icon = p.icon;
-                      const isSelected = username === p.username;
-                      return (
-                        <button
-                          key={p.role}
-                          type="button"
-                          onClick={() => handleSelectPersona(p)}
-                          className={`flex items-start gap-2.5 p-2.5 rounded-lg border text-left transition-all ${
-                            isSelected
-                              ? "border-primary bg-primary/5 ring-1 ring-primary"
-                              : "hover:bg-muted/50"
-                          }`}
-                        >
-                          <div className={`p-1.5 rounded-md border ${p.color}`}>
-                            <Icon className="w-3.5 h-3.5" />
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <div className="text-xs font-semibold leading-none">{p.name}</div>
-                            <div className="text-[10px] text-muted-foreground font-mono mt-1 truncate">
-                              {p.role}
-                            </div>
-                          </div>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                <div className="space-y-1.5 text-left">
-                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                    Username / Email
+                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5 ml-1">
+                    <User className="w-3.5 h-3.5 text-cyan-400" />
+                    <span>Username or Email</span>
                   </label>
                   <input
                     type="text"
                     value={username}
                     onChange={(e) => setUsername(e.target.value)}
                     required
-                    className="w-full px-3 py-2 text-sm rounded-md border bg-background focus:outline-none focus:ring-2 focus:ring-ring"
-                    placeholder="developer@agentspace.local"
+                    className="w-full px-4 py-3.5 text-sm rounded-2xl border border-border/70 bg-background/60 focus:outline-none focus:ring-2 focus:ring-cyan-500/40 focus:border-cyan-500/50 transition-all placeholder:text-muted-foreground/50"
+                    placeholder="Username or email"
                   />
                 </div>
 
-                <div className="space-y-1.5 text-left">
-                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                    Password
+                <div className="space-y-2">
+                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5 ml-1">
+                    <Lock className="w-3.5 h-3.5 text-violet-400" />
+                    <span>Password</span>
                   </label>
                   <div className="relative">
                     <input
                       type={showPassword ? "text" : "password"}
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
-                      className="w-full px-3 py-2 text-sm rounded-md border bg-background focus:outline-none focus:ring-2 focus:ring-ring pr-10"
+                      required
+                      className="w-full px-4 py-3.5 text-sm rounded-2xl border border-border/70 bg-background/60 focus:outline-none focus:ring-2 focus:ring-violet-500/40 focus:border-violet-500/50 transition-all pr-12 placeholder:text-muted-foreground/50"
                       placeholder="••••••••"
                     />
                     <button
                       type="button"
                       onClick={() => setShowPassword(!showPassword)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                      className="absolute right-4 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
                     >
                       {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                     </button>
                   </div>
                 </div>
-              </CardContent>
+              </div>
 
-              <CardFooter className="flex flex-col gap-3">
-                <Button type="submit" className="w-full gap-2" disabled={isLoading}>
-                  <LogIn className="w-4 h-4" />
-                  <span>{isLoading ? "Authenticating..." : "Sign In to Agent Space"}</span>
-                </Button>
-
-                <div className="flex items-center justify-between w-full text-xs text-muted-foreground pt-1">
-                  <button
-                    type="button"
-                    onClick={() => setMode("signup")}
-                    className="hover:text-primary transition-colors"
-                  >
-                    Don't have an account? <span className="font-semibold underline">Sign up</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setMode("admin")}
-                    className="hover:text-primary transition-colors flex items-center gap-1 font-medium"
-                  >
-                    <Shield className="w-3 h-3 text-primary" />
-                    <span>Admin Portal</span>
-                  </button>
-                </div>
-              </CardFooter>
+              <button
+                type="submit"
+                disabled={isLoading}
+                className="w-full py-3.5 px-6 rounded-2xl bg-primary text-primary-foreground font-semibold text-sm hover:opacity-90 active:scale-[0.99] transition-all shadow-lg flex items-center justify-center gap-2 disabled:opacity-50"
+              >
+                <LogIn className="w-4 h-4" />
+                <span>{isLoading ? "Signing In..." : "Sign In"}</span>
+              </button>
             </form>
           )}
 
-          {/* 2. PROTECTED ADMIN LOGIN */}
-          {mode === "admin" && (
-            <form onSubmit={handleAdminLogin}>
-              <CardHeader className="space-y-1">
-                <div className="flex items-center gap-2">
-                  <Badge variant="outline" className="border-primary/40 bg-primary/10 text-primary gap-1 py-1 font-semibold">
-                    <Shield className="w-3.5 h-3.5" />
-                    <span>Protected RBAC Endpoint</span>
-                  </Badge>
-                </div>
-                <CardTitle className="text-xl font-bold mt-2">Administrator Access</CardTitle>
-                <CardDescription>
-                  Requires verified <span className="font-semibold text-foreground">ORG_ADMIN</span> or <span className="font-semibold text-foreground">SYSTEM_ADMIN</span> credentials.
-                </CardDescription>
-              </CardHeader>
-
-              <CardContent className="space-y-4">
-                <div className="p-3 rounded-lg border bg-amber-500/5 border-amber-500/20 text-xs text-amber-700 dark:text-amber-400 space-y-1">
-                  <div className="font-semibold flex items-center gap-1.5">
-                    <Lock className="w-3.5 h-3.5" />
-                    <span>Target Route: POST /api/v1/auth/admin/login</span>
-                  </div>
-                  <p>
-                    Accounts lacking administrator privilege will be denied by the security middleware with HTTP 403 Forbidden.
-                  </p>
-                </div>
-
-                <div className="space-y-1.5 text-left">
-                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                    Administrator Username / Email
-                  </label>
-                  <input
-                    type="text"
-                    value={username}
-                    onChange={(e) => setUsername(e.target.value)}
-                    required
-                    className="w-full px-3 py-2 text-sm rounded-md border bg-background focus:outline-none focus:ring-2 focus:ring-ring"
-                    placeholder="admin_a"
-                  />
-                </div>
-
-                <div className="space-y-1.5 text-left">
-                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                    Administrator Password
-                  </label>
-                  <div className="relative">
-                    <input
-                      type={showPassword ? "text" : "password"}
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      className="w-full px-3 py-2 text-sm rounded-md border bg-background focus:outline-none focus:ring-2 focus:ring-ring pr-10"
-                      placeholder="••••••••"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowPassword(!showPassword)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                    >
-                      {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                    </button>
-                  </div>
-                </div>
-              </CardContent>
-
-              <CardFooter className="flex flex-col gap-3">
-                <Button type="submit" className="w-full gap-2 bg-primary text-primary-foreground" disabled={isLoading}>
-                  <Shield className="w-4 h-4" />
-                  <span>{isLoading ? "Verifying Admin Credentials..." : "Authenticate as Administrator"}</span>
-                </Button>
-
-                <div className="flex items-center justify-between w-full text-xs text-muted-foreground pt-1">
-                  <button
-                    type="button"
-                    onClick={() => setMode("signin")}
-                    className="hover:text-primary transition-colors"
-                  >
-                    ← Back to standard Sign In
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setMode("signup")}
-                    className="hover:text-primary transition-colors"
-                  >
-                    Register new team
-                  </button>
-                </div>
-              </CardFooter>
-            </form>
-          )}
-
-          {/* 3. SIGN UP / NEW WORKSPACE */}
+          {/* 2. SIGN UP FORM */}
           {mode === "signup" && (
-            <form onSubmit={handleSignupSubmit}>
-              <CardHeader className="space-y-1">
-                <CardTitle className="text-xl font-bold">Create Account & Workspace</CardTitle>
-                <CardDescription>
-                  Register a new collaborative workspace for your engineering team.
-                </CardDescription>
-              </CardHeader>
+            <form onSubmit={handleSignupSubmit} className="space-y-6">
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider ml-1">
+                      Full Name
+                    </label>
+                    <input
+                      type="text"
+                      value={signupFullName}
+                      onChange={(e) => setSignupFullName(e.target.value)}
+                      className="w-full px-4 py-3 text-sm rounded-2xl border border-border/70 bg-background/60 focus:outline-none focus:ring-2 focus:ring-cyan-500/40 focus:border-cyan-500/50 transition-all placeholder:text-muted-foreground/50"
+                      placeholder="Alex Morgan"
+                    />
+                  </div>
 
-              <CardContent className="space-y-4">
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1.5 text-left">
-                    <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                  <div className="space-y-2">
+                    <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider ml-1">
                       Username
                     </label>
                     <input
@@ -470,102 +235,116 @@ export default function LoginPage() {
                       value={signupUsername}
                       onChange={(e) => setSignupUsername(e.target.value)}
                       required
-                      className="w-full px-3 py-2 text-sm rounded-md border bg-background focus:outline-none focus:ring-2 focus:ring-ring"
-                      placeholder="e.g. dev_sarah"
-                    />
-                  </div>
-
-                  <div className="space-y-1.5 text-left">
-                    <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                      Organization Name
-                    </label>
-                    <input
-                      type="text"
-                      value={signupOrg}
-                      onChange={(e) => setSignupOrg(e.target.value)}
-                      className="w-full px-3 py-2 text-sm rounded-md border bg-background focus:outline-none focus:ring-2 focus:ring-ring"
-                      placeholder="Acme Engineering"
+                      className="w-full px-4 py-3 text-sm rounded-2xl border border-border/70 bg-background/60 focus:outline-none focus:ring-2 focus:ring-cyan-500/40 focus:border-cyan-500/50 transition-all placeholder:text-muted-foreground/50"
+                      placeholder="amorgan"
                     />
                   </div>
                 </div>
 
-                <div className="space-y-1.5 text-left">
-                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                    Corporate Email
+                <div className="space-y-2">
+                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5 ml-1">
+                    <Mail className="w-3.5 h-3.5 text-cyan-400" />
+                    <span>Email Address</span>
                   </label>
                   <input
                     type="email"
                     value={signupEmail}
                     onChange={(e) => setSignupEmail(e.target.value)}
                     required
-                    className="w-full px-3 py-2 text-sm rounded-md border bg-background focus:outline-none focus:ring-2 focus:ring-ring"
-                    placeholder="sarah@acme.com"
+                    className="w-full px-4 py-3 text-sm rounded-2xl border border-border/70 bg-background/60 focus:outline-none focus:ring-2 focus:ring-cyan-500/40 focus:border-cyan-500/50 transition-all placeholder:text-muted-foreground/50"
+                    placeholder="amorgan@company.com"
                   />
                 </div>
 
-                <div className="space-y-1.5 text-left">
-                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                    Initial RBAC Role
-                  </label>
-                  <select
-                    value={signupRole}
-                    onChange={(e) => setSignupRole(e.target.value)}
-                    className="w-full px-3 py-2 text-sm rounded-md border bg-background focus:outline-none focus:ring-2 focus:ring-ring"
-                  >
-                    <option value="ORG_ADMIN">ORG_ADMIN — Full Organization Control</option>
-                    <option value="PROJECT_OWNER">PROJECT_OWNER — Project Architect & Lead</option>
-                    <option value="MEMBER">MEMBER — Core Developer</option>
-                    <option value="VIEWER">VIEWER — Observer & Auditor</option>
-                  </select>
-                  {roleDescriptions[signupRole] && (
-                    <p className="text-[11px] text-muted-foreground mt-1 leading-snug">
-                      {roleDescriptions[signupRole].desc}
-                    </p>
-                  )}
-                </div>
-
-                <div className="space-y-1.5 text-left">
-                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                    Password
-                  </label>
-                  <div className="relative">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5 ml-1">
+                      <Building2 className="w-3.5 h-3.5 text-violet-400" />
+                      <span>Workspace</span>
+                    </label>
                     <input
-                      type={showPassword ? "text" : "password"}
-                      value={signupPassword}
-                      onChange={(e) => setSignupPassword(e.target.value)}
-                      className="w-full px-3 py-2 text-sm rounded-md border bg-background focus:outline-none focus:ring-2 focus:ring-ring pr-10"
-                      placeholder="••••••••"
+                      type="text"
+                      value={signupOrg}
+                      onChange={(e) => setSignupOrg(e.target.value)}
+                      className="w-full px-4 py-3 text-sm rounded-2xl border border-border/70 bg-background/60 focus:outline-none focus:ring-2 focus:ring-violet-500/40 focus:border-violet-500/50 transition-all placeholder:text-muted-foreground/50"
+                      placeholder="Acme Corp"
                     />
-                    <button
-                      type="button"
-                      onClick={() => setShowPassword(!showPassword)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                    >
-                      {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                    </button>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5 ml-1">
+                      <Lock className="w-3.5 h-3.5 text-violet-400" />
+                      <span>Password</span>
+                    </label>
+                    <div className="relative">
+                      <input
+                        type={showSignupPassword ? "text" : "password"}
+                        value={signupPassword}
+                        onChange={(e) => setSignupPassword(e.target.value)}
+                        className="w-full px-4 py-3 text-sm rounded-2xl border border-border/70 bg-background/60 focus:outline-none focus:ring-2 focus:ring-violet-500/40 focus:border-violet-500/50 transition-all pr-12 placeholder:text-muted-foreground/50"
+                        placeholder="••••••••"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowSignupPassword(!showSignupPassword)}
+                        className="absolute right-4 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                      >
+                        {showSignupPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    </div>
                   </div>
                 </div>
-              </CardContent>
+              </div>
 
-              <CardFooter className="flex flex-col gap-3">
-                <Button type="submit" className="w-full gap-2" disabled={isLoading}>
-                  <UserPlus className="w-4 h-4" />
-                  <span>{isLoading ? "Creating Workspace..." : "Register & Open Agent Space"}</span>
-                </Button>
-
-                <div className="flex items-center justify-center w-full text-xs text-muted-foreground pt-1">
-                  <button
-                    type="button"
-                    onClick={() => setMode("signin")}
-                    className="hover:text-primary transition-colors"
-                  >
-                    Already have an account? <span className="font-semibold underline">Sign in</span>
-                  </button>
-                </div>
-              </CardFooter>
+              <button
+                type="submit"
+                disabled={isLoading}
+                className="w-full py-3.5 px-6 rounded-2xl bg-primary text-primary-foreground font-semibold text-sm hover:opacity-90 active:scale-[0.99] transition-all shadow-lg flex items-center justify-center gap-2 disabled:opacity-50"
+              >
+                <UserPlus className="w-4 h-4" />
+                <span>{isLoading ? "Creating Account..." : "Create Account"}</span>
+              </button>
             </form>
           )}
-        </Card>
+
+          {/* Clean Footer Navigation */}
+          <div className="pt-6 border-t border-border/40 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-muted-foreground">
+            {mode === "signin" ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setMode("signup");
+                  setError(null);
+                }}
+                className="hover:text-primary transition-colors flex items-center gap-1"
+              >
+                <span>Don&apos;t have an account?</span>
+                <span className="font-semibold text-foreground underline underline-offset-4">Sign Up</span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => {
+                  setMode("signin");
+                  setError(null);
+                }}
+                className="hover:text-primary transition-colors flex items-center gap-1"
+              >
+                <span>Already registered?</span>
+                <span className="font-semibold text-foreground underline underline-offset-4">Sign In</span>
+              </button>
+            )}
+
+            <Link
+              href="/admin/login"
+              className="text-muted-foreground hover:text-primary transition-colors flex items-center gap-1.5 font-medium"
+            >
+              <Shield className="w-3.5 h-3.5 text-primary" />
+              <span>Admin Portal</span>
+              <ArrowRight className="w-3 h-3 ml-0.5" />
+            </Link>
+          </div>
+        </div>
       </div>
     </div>
   );
