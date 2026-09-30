@@ -148,7 +148,7 @@ export default function HomePage() {
               <span>Operational</span>
             </div>
             <p className="text-xs text-muted-foreground mt-1 font-mono">
-              FastAPI + Postgres Connected
+              Platform Services Operational
             </p>
           </CardContent>
         </Card>
@@ -260,7 +260,7 @@ export default function HomePage() {
               },
               {
                 title: "Atomic Row Locks",
-                desc: "PostgreSQL SELECT FOR UPDATE race-free takeover",
+                desc: "Atomic session lock & race-free takeover",
                 badge: "Active",
               },
               {

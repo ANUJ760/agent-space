@@ -34,45 +34,54 @@ export function Sidebar() {
   const pathname = usePathname();
 
   return (
-    <aside className="w-64 border-r bg-card flex flex-col h-screen fixed left-0 top-0 z-30">
+    <aside className="w-60 border-r border-border/70 bg-card/90 backdrop-blur-md flex flex-col h-screen fixed left-0 top-0 z-30">
       {/* Brand logo & platform title */}
-      <div className="h-16 flex items-center px-6 border-b gap-3">
-        <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center text-primary-foreground font-bold text-lg shadow-sm">
+      <div className="h-11 flex items-center px-4 border-b border-border/70 gap-2.5">
+        <div className="w-6 h-6 rounded-full border border-primary/50 bg-primary/20 text-primary flex items-center justify-center font-bold text-xs shrink-0">
           A
         </div>
         <div className="flex flex-col">
-          <span className="font-semibold text-sm leading-tight text-foreground">
+          <span className="font-bold text-xs leading-none tracking-tight text-foreground">
             Agent Space
           </span>
-          <span className="text-xs text-muted-foreground">Autonomous Workspace</span>
+          <span className="text-[9px] text-muted-foreground font-mono mt-0.5">Autonomous Workspace</span>
         </div>
       </div>
 
-      {/* Main navigation */}
-      <div className="flex-1 overflow-y-auto py-4 px-3">
-        <div className="px-3 mb-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+      {/* Main navigation with circular minimalistic icons and sharp buttons */}
+      <div className="flex-1 overflow-y-auto py-3 px-2">
+        <div className="px-2 mb-1.5 text-[10px] font-mono font-semibold text-muted-foreground/80 uppercase tracking-widest">
           Workspace
         </div>
-        <nav className="space-y-1">
+        <nav className="space-y-0.5">
           {navItems.map((item) => {
             const Icon = item.icon;
             const isActive =
               item.href === "/"
                 ? pathname === "/"
-                : pathname?.startsWith(item.href);
+                : pathname === item.href || pathname?.startsWith(`${item.href}/`);
 
             return (
               <Link
                 key={item.href}
                 href={item.href}
                 className={cn(
-                  "flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors",
+                  "flex items-center gap-2.5 px-2.5 py-1.5 rounded-none text-xs font-medium transition-all",
                   isActive
-                    ? "bg-primary text-primary-foreground shadow-sm"
-                    : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                    ? "bg-accent/80 text-foreground border-l-2 border-primary font-semibold"
+                    : "text-muted-foreground hover:bg-muted/40 hover:text-foreground border-l-2 border-transparent"
                 )}
               >
-                <Icon className="w-4 h-4 shrink-0" />
+                <div
+                  className={cn(
+                    "w-5 h-5 rounded-full flex items-center justify-center transition-colors shrink-0",
+                    isActive
+                      ? "border border-primary/60 bg-primary/10 text-primary"
+                      : "border border-border/60 text-muted-foreground"
+                  )}
+                >
+                  <Icon className="w-2.5 h-2.5" />
+                </div>
                 <span>{item.title}</span>
               </Link>
             );
@@ -81,12 +90,12 @@ export function Sidebar() {
       </div>
 
       {/* Footer status / environment */}
-      <div className="p-4 border-t text-xs text-muted-foreground flex items-center justify-between">
+      <div className="p-3 border-t border-border/70 text-[11px] text-muted-foreground flex items-center justify-between bg-background/40">
         <div className="flex items-center gap-2">
-          <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-          <span>Backend Connected</span>
+          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+          <span className="font-mono text-[10px] tracking-tight">System Operational</span>
         </div>
-        <span className="font-mono text-[10px] bg-muted px-1.5 py-0.5 rounded">
+        <span className="font-mono text-[9px] border border-border/60 bg-muted/40 px-1 py-0.2 rounded-none">
           v0.1.0
         </span>
       </div>

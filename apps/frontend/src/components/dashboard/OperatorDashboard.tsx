@@ -57,7 +57,7 @@ export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({ telemetry 
             <span className={`px-2 py-0.5 text-xs font-semibold rounded ${
               telemetry.database_health === 'UP' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-rose-500/20 text-rose-400'
             }`}>
-              PostgreSQL
+              Data Store
             </span>
           </div>
         </div>
@@ -68,7 +68,7 @@ export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({ telemetry 
           <div className="flex items-center justify-between mt-2">
             <span className="text-2xl font-bold text-slate-100">{telemetry.active_workflows}</span>
             <span className="px-2 py-0.5 text-xs font-semibold rounded bg-sky-500/20 text-sky-400">
-              Temporal
+              Workflow Engine
             </span>
           </div>
         </div>
@@ -91,7 +91,7 @@ export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({ telemetry 
             <span className="text-2xl font-bold text-slate-100">
               {telemetry.queue_depth.agent_tasks + telemetry.queue_depth.nats_events}
             </span>
-            <span className="text-xs text-slate-400">NATS + Outbox</span>
+            <span className="text-xs text-slate-400">Event Stream</span>
           </div>
         </div>
 

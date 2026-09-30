@@ -63,6 +63,7 @@ pnpm-debug.log*
 .next/
 out/
 .turbo/
+*.tsbuildinfo
 
 # Environment and Secret files
 .env

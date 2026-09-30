@@ -57,13 +57,13 @@ describe("Operator Dashboard Component", () => {
     // Header & health badges
     expect(screen.getByText("System Operator Dashboard")).toBeInTheDocument();
     expect(screen.getByText("HEALTHY")).toBeInTheDocument();
-    expect(screen.getByText("PostgreSQL")).toBeInTheDocument();
+    expect(screen.getByText("Data Store")).toBeInTheDocument();
     expect(screen.getByText("UP")).toBeInTheDocument();
 
     // Active workflows
     expect(screen.getByText("Active Workflows")).toBeInTheDocument();
     expect(screen.getByText("14")).toBeInTheDocument();
-    expect(screen.getByText("Temporal")).toBeInTheDocument();
+    expect(screen.getByText("Workflow Engine")).toBeInTheDocument();
 
     // Agent success rate & availability
     expect(screen.getByText("Agent Success Rate")).toBeInTheDocument();
