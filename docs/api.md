@@ -23,16 +23,49 @@ All authenticated endpoints require an `Authorization: Bearer <JWT>` header cont
 ```
 
 ### `POST /api/v1/auth/login`
-- **Summary**: Authenticates user against Keycloak realm and issues access + refresh tokens.
+- **Summary**: Authenticates user against Keycloak realm or local RBAC directory and issues access token.
 - **Auth**: Public.
 - **Request Body**:
 ```json
 {
   "username": "dev_user",
+  "password": "secure_password",
+  "role": "MEMBER"
+}
+```
+- **Response**: `200 OK` (`access_token`, `token_type`, `expires_in`, `user`).
+
+### `POST /api/v1/auth/admin/login`
+- **Summary**: Protected administrator login strictly enforcing `ORG_ADMIN` or `SYSTEM_ADMIN` role (rejects non-admins with 403 Forbidden).
+- **Auth**: Public with RBAC role guard.
+- **Request Body**:
+```json
+{
+  "username": "admin_a",
+  "password": "secure_admin_password"
+}
+```
+- **Response**: `200 OK` (`access_token`, `token_type`, `expires_in`, `user`).
+
+### `GET /api/v1/auth/admin/session`
+- **Summary**: Protected admin verification endpoint guarded by `require_role(Role.ORG_ADMIN)`.
+- **Auth**: Required (`ORG_ADMIN`, `SYSTEM_ADMIN`).
+- **Response**: `200 OK` (Admin user profile with organization mapping and admin role grants).
+
+### `POST /api/v1/auth/register`
+- **Summary**: Registers a new user, provisions or associates an organization workspace, and issues an access token.
+- **Auth**: Public.
+- **Request Body**:
+```json
+{
+  "username": "alice",
+  "email": "alice@example.com",
+  "organization_name": "Acme Robotics",
+  "role": "ORG_ADMIN",
   "password": "secure_password"
 }
 ```
-- **Response**: `200 OK` (`access_token`, `refresh_token`, `expires_in`, `token_type`).
+- **Response**: `201 Created` (`access_token`, `token_type`, `expires_in`, `user`).
 
 ### `POST /api/v1/auth/refresh`
 - **Summary**: Refreshes expired access token using a valid refresh token.
@@ -41,7 +74,7 @@ All authenticated endpoints require an `Authorization: Bearer <JWT>` header cont
 - **Response**: `200 OK` (`access_token`, `refresh_token`, `expires_in`).
 
 ### `POST /api/v1/auth/logout`
-- **Summary**: Invalidates active refresh token and terminates Keycloak session.
+- **Summary**: Invalidates active refresh token and terminates session.
 - **Auth**: Required.
 - **Request Body**: `{"refresh_token": "string"}`
 - **Response**: `204 No Content`
