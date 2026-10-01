@@ -11,6 +11,7 @@ Idempotently provisions:
 """
 
 import asyncio
+import os
 import uuid
 import structlog
 from sqlalchemy import select
@@ -19,6 +20,7 @@ from sqlalchemy.orm import selectinload
 from app.config import get_settings
 from app.database import DatabaseManager
 from app.auth.rbac import Role
+from app.auth.passwords import hash_password
 from app.models.organization import Organization
 from app.models.user import User
 from app.models.project import Project
@@ -84,6 +86,12 @@ async def seed() -> None:
 
         created_users = []
         for u in seed_users:
+            password = os.environ.get(f"SEED_{u['username'].upper()}_PASSWORD")
+            password_hash = None
+            if password:
+                if len(password) < 8:
+                    raise ValueError(f"SEED_{u['username'].upper()}_PASSWORD must be at least 8 characters")
+                password_hash = await asyncio.to_thread(hash_password, password)
             stmt = select(User).where(User.username == u["username"])
             res = await session.execute(stmt)
             existing_user = res.scalars().first()
@@ -98,6 +106,7 @@ async def seed() -> None:
                     role=u["role"],
                     organization_id=org.id,
                     is_active=True,
+                    password_hash=password_hash,
                 )
                 session.add(new_user)
                 await session.flush()
@@ -109,6 +118,8 @@ async def seed() -> None:
                     existing_user.role = u["role"]
                 if existing_user.organization_id != org.id:
                     existing_user.organization_id = org.id
+                if existing_user.password_hash is None and password_hash is not None:
+                    existing_user.password_hash = password_hash
                 await session.flush()
                 print(f"[EXISTS]  User: {u['username']} (Role: {existing_user.role}, Email: {existing_user.email})")
 

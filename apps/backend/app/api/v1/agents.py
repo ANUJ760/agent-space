@@ -12,17 +12,46 @@ from app.auth.rbac import (
     authorize_object_access,
     authorize_project_access,
 )
+from app.config import get_settings
 from app.database import get_db_session
 from app.errors import ConflictError, ForbiddenError, NotFoundError
 from app.models.agent import Agent
 from app.repositories.agent_repo import AgentRepository
 from app.repositories.project_repo import ProjectRepository
-from app.schemas.agent import AgentCreate, AgentResponse, AgentUpdate
+from app.schemas.agent import (
+    AgentCreate,
+    AgentModelDefaultsResponse,
+    AgentResponse,
+    AgentUpdate,
+)
 
 router = APIRouter()
 
 
 # ─── Organization-Level Agent Endpoints ─────────────────────────────────────
+
+
+@router.get(
+    "/agents/model-defaults",
+    response_model=AgentModelDefaultsResponse,
+    summary="Get Agent Model Defaults",
+    description=(
+        "Returns the default provider, model and endpoint offered when registering an agent. "
+        "Contains no secrets: agent API keys are supplied and kept by the client."
+    ),
+)
+async def get_agent_model_defaults(
+    actor: CurrentActorDep,
+) -> AgentModelDefaultsResponse:
+    """Advertise developer-configured defaults for user-supplied (BYOK) agents."""
+    defaults = get_settings().agent_model_defaults
+    return AgentModelDefaultsResponse(
+        provider=defaults.provider,
+        model=defaults.model,
+        base_url=defaults.base_url,
+        user_supplied_keys_enabled=defaults.user_supplied_keys_enabled,
+        free_tier_models=list(defaults.free_tier_models),
+    )
 
 
 @router.get(
@@ -162,6 +191,16 @@ async def update_agent(
         agent.status = payload.status
     if payload.configuration is not None:
         agent.configuration = payload.configuration
+    if "project_id" in payload.model_fields_set:
+        if payload.project_id is None:
+            agent.project_id = None
+        elif payload.project_id != agent.project_id:
+            project_repo = ProjectRepository(session)
+            target = await project_repo.get_by_id(payload.project_id)
+            if target is None or target.organization_id != actor.organization_id:
+                raise NotFoundError(resource="Project", resource_id=str(payload.project_id))
+            authorize_project_access(actor, target, Permission.AGENT_MANAGE)
+            agent.project_id = payload.project_id
 
     agent.version += 1
     updated = await agent_repo.update(agent)

@@ -9,6 +9,8 @@ export interface Project {
   slug: string;
   description: string | null;
   status: string;
+  repository_url?: string | null;
+  default_branch?: string;
   created_by_id: string | null;
   created_at: string;
   updated_at: string;
@@ -18,6 +20,7 @@ export interface ProjectCreate {
   name: string;
   slug: string;
   description?: string;
+  repository_url?: string;
 }
 
 export interface Task {
@@ -55,6 +58,50 @@ export interface Agent {
   model_provider: string;
   status: string;
   capabilities: string[];
+  system_prompt?: string | null;
+  configuration?: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+  version: number;
+}
+
+export interface AgentCreate {
+  name: string;
+  slug: string;
+  description?: string;
+  role?: string;
+  model?: string;
+  model_provider?: string;
+  capabilities?: string[];
+  system_prompt?: string;
+  status?: string;
+  configuration?: Record<string, unknown>;
+  project_id?: string | null;
+}
+
+export interface AgentUpdate {
+  name?: string;
+  description?: string;
+  role?: string;
+  model?: string;
+  model_provider?: string;
+  capabilities?: string[];
+  system_prompt?: string;
+  status?: string;
+  configuration?: Record<string, unknown>;
+  project_id?: string | null;
+}
+
+/**
+ * Secret-free defaults advertised by the backend for user-supplied (BYOK)
+ * agent providers. The API key itself never reaches the backend.
+ */
+export interface AgentModelDefaults {
+  provider: string;
+  model: string;
+  base_url: string;
+  user_supplied_keys_enabled: boolean;
+  free_tier_models: string[];
 }
 
 export interface ProjectMember {
@@ -97,4 +144,3 @@ export interface AuthTokenResponse {
   expires_in: number;
   user: UserProfile;
 }
-

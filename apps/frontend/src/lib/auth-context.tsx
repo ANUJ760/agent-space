@@ -24,7 +24,7 @@ export interface AuthUser {
 export interface SignupParams {
   username: string;
   email: string;
-  password?: string;
+  password: string;
   displayName?: string;
   organizationName?: string;
   role?: string;
@@ -35,8 +35,8 @@ interface AuthContextType {
   token: string | null;
   isAuthenticated: boolean;
   isLoading: boolean;
-  login: (username: string, password?: string, role?: string) => Promise<void>;
-  adminLogin: (username: string, password?: string) => Promise<void>;
+  login: (username: string, password: string) => Promise<void>;
+  adminLogin: (username: string, password: string) => Promise<void>;
   signup: (params: SignupParams) => Promise<void>;
   logout: () => void;
 }
@@ -74,15 +74,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const login = useCallback(
-    async (username: string, password?: string, role?: string) => {
+    async (username: string, password: string) => {
       setIsLoading(true);
       try {
         const response = await apiFetch<AuthTokenResponse>("/api/v1/auth/login", {
           method: "POST",
           body: JSON.stringify({
             username: username.trim(),
-            password: password?.trim() || undefined,
-            role: role || undefined,
+            password,
           }),
         });
 
@@ -111,14 +110,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   );
 
   const adminLogin = useCallback(
-    async (username: string, password?: string) => {
+    async (username: string, password: string) => {
       setIsLoading(true);
       try {
         const response = await apiFetch<AuthTokenResponse>("/api/v1/auth/admin/login", {
           method: "POST",
           body: JSON.stringify({
             username: username.trim(),
-            password: password?.trim() || undefined,
+            password,
           }),
         });
 
@@ -136,7 +135,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setUser(authenticatedUser);
         localStorage.setItem(TOKEN_KEY, response.access_token);
         localStorage.setItem(USER_KEY, JSON.stringify(authenticatedUser));
-        router.push("/");
+        router.push("/admin");
       } finally {
         setIsLoading(false);
       }
@@ -153,7 +152,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           body: JSON.stringify({
             username: params.username.trim(),
             email: params.email.trim(),
-            password: params.password?.trim() || undefined,
+            password: params.password,
             display_name: params.displayName?.trim() || params.username.trim(),
             organization_name: params.organizationName?.trim() || undefined,
           }),

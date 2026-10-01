@@ -1,5 +1,3 @@
-version: "3.8"
-
 services:
   backend:
     build:
@@ -10,20 +8,26 @@ services:
     ports:
       - "8000:8000"
     environment:
-      - APP_ENV=production
+      - ENVIRONMENT=production
       - DEBUG=false
-      - DATABASE_URL=postgresql+asyncpg://agentspace:${DB_PASSWORD}@postgres:5432/agentspace
+      - WORKSPACE_ROOT=/app/var/workspaces
+      - GIT_ALLOWED_HOSTS=${GIT_ALLOWED_HOSTS:-github.com,gitlab.com,bitbucket.org}
+      - SECRET_KEY=${SECRET_KEY:?Set SECRET_KEY for production}
+      - CORS_ORIGINS=${PUBLIC_WEB_URL:?Set PUBLIC_WEB_URL for production}
+      - DATABASE_URL=postgresql+asyncpg://agentspace:${DB_PASSWORD:?Set DB_PASSWORD for production}@postgres:5432/agentspace
       - REDIS_URL=redis://redis:6379/0
       - NATS_URL=nats://nats:4222
       - TEMPORAL_HOST=temporal:7233
-      - KEYCLOAK_URL=http://keycloak:8080
+      - KEYCLOAK_SERVER_URL=http://keycloak:8080
+    volumes:
+      - ${WORKSPACE_HOST_PATH:-./var/workspaces}:/app/var/workspaces
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/health/live')"]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -41,8 +45,9 @@ services:
     image: agentspace/worker:0.1.0
     restart: unless-stopped
     environment:
-      - APP_ENV=production
-      - DATABASE_URL=postgresql+asyncpg://agentspace:${DB_PASSWORD}@postgres:5432/agentspace
+      - ENVIRONMENT=production
+      - SECRET_KEY=${SECRET_KEY:?Set SECRET_KEY for production}
+      - DATABASE_URL=postgresql+asyncpg://agentspace:${DB_PASSWORD:?Set DB_PASSWORD for production}@postgres:5432/agentspace
       - REDIS_URL=redis://redis:6379/0
       - NATS_URL=nats://nats:4222
       - TEMPORAL_HOST=temporal:7233
@@ -63,15 +68,20 @@ services:
     build:
       context: .
       dockerfile: docker/Dockerfile.frontend
+      args:
+        NEXT_PUBLIC_API_URL: ${PUBLIC_API_URL:-http://localhost:8000}
+        NEXT_PUBLIC_COLLAB_URL: ${PUBLIC_COLLAB_URL:-ws://localhost:1234}
     image: agentspace/frontend:0.1.0
     restart: unless-stopped
     ports:
       - "3000:3000"
     environment:
       - NODE_ENV=production
-      - NEXT_PUBLIC_API_URL=http://backend:8000
+      - NEXT_PUBLIC_API_URL=${PUBLIC_API_URL:-http://localhost:8000}
+      - NEXT_PUBLIC_COLLAB_URL=${PUBLIC_COLLAB_URL:-ws://localhost:1234}
     depends_on:
       - backend
+      - collab
     healthcheck:
       test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000', (r) => {if (r.statusCode < 500) process.exit(0); else process.exit(1);})"]
       interval: 30s
@@ -84,13 +94,30 @@ services:
           cpus: "1.0"
           memory: 1024M
 
+  collab:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.collab
+    image: agentspace/collab:0.1.0
+    restart: unless-stopped
+    ports:
+      - "1234:1234"
+    environment:
+      - WORKSPACE_ROOT=/app/var/workspaces
+      - COLLAB_API_URL=http://backend:8000
+      - COLLAB_PORT=1234
+    volumes:
+      - ${WORKSPACE_HOST_PATH:-./var/workspaces}:/app/var/workspaces
+    depends_on:
+      - backend
+
   postgres:
     image: postgres:16-alpine
     restart: unless-stopped
     environment:
       POSTGRES_DB: agentspace
       POSTGRES_USER: agentspace
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-changeme_prod_pw}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD for production}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:

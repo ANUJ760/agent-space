@@ -32,6 +32,8 @@ RUN pip install --no-cache-dir --upgrade pip && \
 # --- Stage 2: Final Minimal & Hardened Runtime ---
 FROM python:3.11-slim AS runtime
 
+RUN apt-get update && apt-get install -y --no-install-recommends git && rm -rf /var/lib/apt/lists/*
+
 # Security hardening: Create non-root system group and user
 RUN groupadd -g 10001 appuser && \
     useradd -u 10001 -g appuser -s /sbin/nologin -M appuser
@@ -45,8 +47,9 @@ COPY --from=builder --chown=appuser:appuser /app/.venv /app/.venv
 ENV PATH="/app/.venv/bin:$PATH" \
     PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
-    APP_ENV=production \
-    PYTHONPATH=/app
+    ENVIRONMENT=production \
+    WORKSPACE_ROOT=/app/var/workspaces \
+    PYTHONPATH=/app/apps/backend:/app
 
 # Copy application modules and configs
 COPY --chown=appuser:appuser apps /app/apps
@@ -54,6 +57,7 @@ COPY --chown=appuser:appuser agents /app/agents
 COPY --chown=appuser:appuser packages /app/packages
 COPY --chown=appuser:appuser alembic.ini /app/alembic.ini
 COPY --chown=appuser:appuser pyproject.toml /app/pyproject.toml
+RUN mkdir -p /app/var/workspaces && chown -R appuser:appuser /app/var
 
 # Set permissions and switch to unprivileged user
 USER 10001:10001
@@ -63,7 +67,7 @@ EXPOSE 8000
 
 # Health check using Python stdlib (no extra tools like curl/wget needed)
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-  CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')" || exit 1
+  CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/health/live')" || exit 1
 
 # Launch application using production uvicorn factory
 ENTRYPOINT ["uvicorn", "app.main:create_app", "--factory", "--host", "0.0.0.0", "--port", "8000"]

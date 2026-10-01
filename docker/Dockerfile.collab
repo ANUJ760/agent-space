@@ -1,0 +1,12 @@
+FROM node:24-alpine
+WORKDIR /app
+COPY package.json package-lock.json ./
+COPY apps/frontend/package.json apps/frontend/package.json
+COPY apps/collab/package.json apps/collab/package.json
+RUN npm ci --ignore-scripts --omit=dev --workspace=@agent-space/collab
+COPY apps/collab/server.mjs apps/collab/server.mjs
+RUN addgroup -S -g 10001 nodejs && adduser -S -u 10001 -G nodejs collab && mkdir -p /app/var/workspaces && chown -R 10001:10001 /app/var
+USER 10001:10001
+ENV NODE_ENV=production WORKSPACE_ROOT=/app/var/workspaces
+EXPOSE 1234
+CMD ["npm", "run", "start", "--workspace=@agent-space/collab"]

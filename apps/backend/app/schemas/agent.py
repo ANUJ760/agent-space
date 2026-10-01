@@ -7,6 +7,20 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, Field
 
 
+def default_agent_model() -> str:
+    """Resolve the developer-configured default model for client-side agents."""
+    from app.config import get_settings
+
+    return get_settings().default_agent_model
+
+
+def default_agent_provider() -> str:
+    """Resolve the developer-configured default provider for client-side agents."""
+    from app.config import get_settings
+
+    return get_settings().default_agent_provider
+
+
 class AgentCreate(BaseModel):
     """Payload to register a new agent."""
 
@@ -24,14 +38,14 @@ class AgentCreate(BaseModel):
         description="Specialized role (e.g. ARCHITECT, DEVELOPER, TESTER, REVIEWER)",
     )
     model: str = Field(
-        default="claude-3-5-sonnet",
+        default_factory=default_agent_model,
         max_length=100,
         description="Underlying foundation model identifier",
     )
     model_provider: str = Field(
-        default="anthropic",
+        default_factory=default_agent_provider,
         max_length=50,
-        description="Provider name (anthropic, openai, google, ollama)",
+        description="Provider name (gemini, anthropic, openai, ollama)",
     )
     capabilities: list[str] = Field(
         default_factory=list,
@@ -69,6 +83,22 @@ class AgentUpdate(BaseModel):
     system_prompt: str | None = Field(default=None, max_length=8192)
     status: str | None = Field(default=None, max_length=50)
     configuration: dict[str, Any] | None = None
+    project_id: uuid.UUID | None = Field(
+        default=None,
+        description="Reassign agent to a project, or null to make it organization-wide",
+    )
+
+
+class AgentModelDefaultsResponse(BaseModel):
+    """Public, secret-free defaults for client-side agent model selection."""
+
+    provider: str = Field(description="Default provider offered when adding an agent")
+    model: str = Field(description="Default model offered when adding an agent")
+    base_url: str = Field(description="Base URL the browser calls the provider on")
+    user_supplied_keys_enabled: bool = Field(
+        description="Whether the UI should let users attach their own API key"
+    )
+    free_tier_models: list[str] = Field(description="Models selectable without a paid plan")
 
 
 class AgentResponse(BaseModel):

@@ -91,6 +91,8 @@ async def get_current_actor(
 ) -> Actor:
     """Resolve database user and return an active Actor security principal."""
     db_user = await reconcile_user(session, current_user)
+    if not db_user.is_active:
+        raise ForbiddenError("Account is inactive.")
     try:
         role = Role(db_user.role)
     except ValueError:

@@ -23,21 +23,20 @@ All authenticated endpoints require an `Authorization: Bearer <JWT>` header cont
 ```
 
 ### `POST /api/v1/auth/login`
-- **Summary**: Authenticates user against Keycloak realm or local RBAC directory and issues access token.
+- **Summary**: Verifies a local account password and issues an access token. Admin accounts use the administrator login endpoint.
 - **Auth**: Public.
 - **Request Body**:
 ```json
 {
   "username": "dev_user",
-  "password": "secure_password",
-  "role": "MEMBER"
+  "password": "secure_password"
 }
 ```
 - **Response**: `200 OK` (`access_token`, `token_type`, `expires_in`, `user`).
 
 ### `POST /api/v1/auth/admin/login`
-- **Summary**: Protected administrator login strictly enforcing `ORG_ADMIN` or `SYSTEM_ADMIN` role (rejects non-admins with 403 Forbidden).
-- **Auth**: Public with RBAC role guard.
+- **Summary**: Verifies the account password, then requires `ORG_ADMIN` or `SYSTEM_ADMIN` role.
+- **Auth**: Public sign-in endpoint; password and admin role are required.
 - **Request Body**:
 ```json
 {
@@ -53,7 +52,7 @@ All authenticated endpoints require an `Authorization: Bearer <JWT>` header cont
 - **Response**: `200 OK` (Admin user profile with organization mapping and admin role grants).
 
 ### `POST /api/v1/auth/register`
-- **Summary**: Registers a new user, provisions or associates an organization workspace, and issues an access token.
+- **Summary**: Registers a new user and a new organization workspace, stores a salted password hash, and issues an access token. Joining an existing workspace requires an administrator-managed flow.
 - **Auth**: Public.
 - **Request Body**:
 ```json
@@ -61,7 +60,6 @@ All authenticated endpoints require an `Authorization: Bearer <JWT>` header cont
   "username": "alice",
   "email": "alice@example.com",
   "organization_name": "Acme Robotics",
-  "role": "ORG_ADMIN",
   "password": "secure_password"
 }
 ```
@@ -269,6 +267,11 @@ All authenticated endpoints require an `Authorization: Bearer <JWT>` header cont
 
 ### `GET /api/v1/agents`
 - **Summary**: Lists registered autonomous agents available for assignment.
+- **Auth**: Required.
+- **Response**: `200 OK`
+
+### `GET /api/v1/agents/model-defaults`
+- **Summary**: Returns the default provider, model, endpoint, and free-tier model list offered when adding an agent. Contains no secrets — agent API keys are supplied by the client.
 - **Auth**: Required.
 - **Response**: `200 OK`
 

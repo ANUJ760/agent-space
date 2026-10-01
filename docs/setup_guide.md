@@ -67,7 +67,6 @@ LOG_LEVEL=INFO                         # Set to 'INFO' or 'WARNING' in productio
 
 # Generate with: openssl rand -hex 32
 SECRET_KEY=change_this_to_a_secure_random_64_character_hex_string_in_production
-JWT_SECRET=change_this_to_another_secure_random_64_character_hex_string_in_production
 
 # ==============================================================================
 # 2. DATABASE (PostgreSQL 16)
@@ -183,9 +182,9 @@ Seeding finished successfully.
 - **Backend Protected Endpoint**: `POST /api/v1/auth/admin/login`
 - **Verification Endpoint**: `GET /api/v1/auth/admin/session`
 
-| Username | Password | Role | Description |
-| :--- | :--- | :--- | :--- |
-| **`admin`** | `AdminPassword123!` | `ORG_ADMIN` | Organization and System Administrator |
+| Username | Role | Description |
+| :--- | :--- | :--- |
+| **`admin`** | `ORG_ADMIN` | Organization administrator; set a private password before use |
 
 > [!IMPORTANT]
 > **Strict Admin Isolation**: The `/admin/login` page has **zero signup options**. Standard member accounts cannot authenticate here, and admin accounts are strictly rejected with `403 Forbidden` if attempting to log in via the standard `/login` route.
@@ -196,11 +195,16 @@ Seeding finished successfully.
 - **Frontend Portal URL**: `http://localhost:3000/login`
 - **Backend Endpoint**: `POST /api/v1/auth/login`
 
-| Username | Password | Role | Capabilities |
-| :--- | :--- | :--- | :--- |
-| **`lead`** | `LeadPassword123!` | `PROJECT_OWNER` | Manage projects, assign tasks to agents, approve PRs |
-| **`developer`** | `DeveloperPassword123!` | `MEMBER` | Execute claimed tasks, pair program with AI agents |
-| **`auditor`** | `AuditorPassword123!` | `VIEWER` | Read-only inspection of audit events and outbox logs |
+| Username | Role | Capabilities |
+| :--- | :--- | :--- |
+| **`lead`** | `PROJECT_OWNER` | Manage projects, assign tasks to agents, approve PRs |
+| **`developer`** | `MEMBER` | Execute claimed tasks, pair program with AI agents |
+| **`auditor`** | `VIEWER` | Read-only inspection of audit events and outbox logs |
+
+Seeded accounts have no preset passwords. After migrations, run
+`PYTHONPATH=apps/backend:. python3 scripts/set_user_password.py admin` (or another
+username) and enter a private password at the prompt. Existing accounts created
+before password hashing need the same one-time setup.
 
 ---
 
@@ -326,7 +330,7 @@ ss -tulpn | grep -E "(3000|8000|5432|6379)"
 
 ### Issue: "403 Access Denied" on `/admin/login`
 - **Cause**: Trying to log in with a non-admin account (e.g. `developer`).
-- **Fix**: The Admin Portal requires `ORG_ADMIN` or `SYSTEM_ADMIN` role. Use `admin` with `AdminPassword123!`.
+- **Fix**: The Admin Portal requires `ORG_ADMIN` or `SYSTEM_ADMIN` role and the account's private password.
 
 ### Issue: "Administrator accounts are strictly restricted to the protected Admin Portal" on `/login`
 - **Cause**: Attempting to authenticate as `admin` on the standard member login page.

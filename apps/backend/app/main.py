@@ -11,8 +11,9 @@ Creates the FastAPI application instance with:
 No business logic lives here.
 """
 
+import asyncio
 from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 
 import structlog
 from fastapi import FastAPI
@@ -30,6 +31,7 @@ from app.middleware import (
     RequestSizeLimitMiddleware,
     SecurityHeadersMiddleware,
 )
+from app.services.workspace import auto_checkpoint_all
 
 logger = structlog.stdlib.get_logger(__name__)
 
@@ -61,7 +63,21 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         # App can still start — health/ready will report degraded in M05
         # For now we allow startup to continue so non-DB endpoints work
 
-    yield
+    async def checkpoint_loop() -> None:
+        while True:
+            await asyncio.sleep(300)
+            try:
+                await asyncio.to_thread(auto_checkpoint_all)
+            except Exception:
+                logger.exception("workspace_checkpoint_failed")
+
+    checkpoint_task = asyncio.create_task(checkpoint_loop())
+    try:
+        yield
+    finally:
+        checkpoint_task.cancel()
+        with suppress(asyncio.CancelledError):
+            await checkpoint_task
 
     # Shutdown
     if db._engine is not None:
@@ -93,9 +109,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         title=settings.app_name,
         version=settings.app_version,
         description="A modular, self-hostable collaboration platform where humans and autonomous AI agents work together on software projects.",
-        docs_url="/docs",
-        redoc_url="/redoc",
-        openapi_url="/openapi.json",
+        docs_url=None if settings.environment == "production" else "/docs",
+        redoc_url=None if settings.environment == "production" else "/redoc",
+        openapi_url=None if settings.environment == "production" else "/openapi.json",
         lifespan=lifespan,
     )
     app.state.settings = settings

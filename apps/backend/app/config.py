@@ -9,7 +9,7 @@ import json
 from functools import lru_cache
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, SecretStr, field_validator
+from pydantic import BaseModel, Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -152,6 +152,32 @@ class ModelGatewaySettings(BaseModel):
         return v
 
 
+class AgentModelDefaults(BaseModel):
+    """Defaults advertised to clients for user-supplied (BYOK) agent providers.
+
+    These values are public: the browser uses them to pre-fill the "Add Agent"
+    form. No secret ever lives here — API keys stay in the user's browser.
+    """
+
+    provider: Literal["gemini"] = Field(default="gemini")
+    model: str = Field(default="gemini-3.5-flash")
+    base_url: str = Field(default="https://generativelanguage.googleapis.com/v1beta")
+    user_supplied_keys_enabled: bool = Field(default=True)
+    free_tier_models: tuple[str, ...] = (
+        "gemini-3.5-flash",
+        "gemini-3.5-flash-lite",
+        "gemini-2.5-flash",
+        "gemini-2.5-flash-lite",
+    )
+
+    @field_validator("base_url")
+    @classmethod
+    def validate_gemini_url(cls, v: str) -> str:
+        if not (v.startswith("http://") or v.startswith("https://")):
+            raise ValueError("GEMINI_API_BASE_URL must start with 'http://' or 'https://'")
+        return v
+
+
 class SandboxSettings(BaseModel):
     """Tool execution sandbox settings."""
 
@@ -252,6 +278,15 @@ class Settings(BaseSettings):
     model_temperature: float = Field(default=0.2, ge=0.0, le=2.0)
     model_max_tokens: int = Field(default=4096, ge=1, le=128000)
 
+    # 10b. User-supplied (BYOK) agent providers — agent inference runs client-side
+    default_agent_provider: Literal["gemini"] = "gemini"
+    default_agent_model: str = "gemini-3.5-flash"
+    gemini_api_base_url: str = "https://generativelanguage.googleapis.com/v1beta"
+    user_supplied_api_keys_enabled: bool = True
+    # Shared workspace volume. Mount an AWS EFS access point here in production.
+    workspace_root: str = "./var/workspaces"
+    git_allowed_hosts: str = "github.com,gitlab.com,bitbucket.org"
+
     # 11. Sandbox
     sandbox_type: Literal["docker", "gvisor", "local"] = "docker"
     sandbox_docker_image: str = "python:3.11-slim"
@@ -274,6 +309,15 @@ class Settings(BaseSettings):
         case_sensitive=False,
         extra="ignore",
     )
+
+    @model_validator(mode="after")
+    def require_production_secret(self) -> "Settings":
+        if self.environment == "production" and (
+            len(self.secret_key.get_secret_value()) < 32
+            or self.secret_key.get_secret_value() == "change-this-to-a-secure-random-32-byte-hex-string-for-prod"
+        ):
+            raise ValueError("Production SECRET_KEY must be a unique value of at least 32 characters")
+        return self
 
     @field_validator("cors_origins", mode="before")
     @classmethod
@@ -430,6 +474,15 @@ class Settings(BaseSettings):
             default_embedding_model=self.default_embedding_model,
             temperature=self.model_temperature,
             max_tokens=self.model_max_tokens,
+        )
+
+    @property
+    def agent_model_defaults(self) -> AgentModelDefaults:
+        return AgentModelDefaults(
+            provider=self.default_agent_provider,
+            model=self.default_agent_model,
+            base_url=self.gemini_api_base_url,
+            user_supplied_keys_enabled=self.user_supplied_api_keys_enabled,
         )
 
     @property

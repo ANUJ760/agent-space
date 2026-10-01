@@ -341,10 +341,38 @@ class TestAdminEndpoints:
         )
 
         with TestClient(app) as client:
-            # 1. Admin login endpoint accepts admin and returns ORG_ADMIN
-            resp = client.post("/api/v1/auth/admin/login", json={"username": "adm_user"})
+            registration = client.post(
+                "/api/v1/auth/register",
+                json={
+                    "username": "adm_user",
+                    "email": "adm_user@example.com",
+                    "password": "CorrectPrivatePassword123!",
+                    "organization_name": "Admin Test Space",
+                },
+            )
+            assert registration.status_code == status.HTTP_201_CREATED
+
+            # A known URL and username cannot bypass password verification.
+            assert client.post(
+                "/api/v1/auth/admin/login", json={"username": "adm_user"}
+            ).status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+            assert client.post(
+                "/api/v1/auth/admin/login",
+                json={"username": "adm_user", "password": "wrong"},
+            ).status_code == status.HTTP_401_UNAUTHORIZED
+
+            resp = client.post(
+                "/api/v1/auth/admin/login",
+                json={"username": "adm_user", "password": "CorrectPrivatePassword123!"},
+            )
             assert resp.status_code == status.HTTP_200_OK
             assert resp.json()["user"]["role"] in ("ORG_ADMIN", "SYSTEM_ADMIN")
+
+            assert client.get("/api/v1/auth/admin/session").status_code == status.HTTP_401_UNAUTHORIZED
+            assert client.get(
+                "/api/v1/auth/admin/session",
+                headers={"Authorization": "Bearer mock-dev-token"},
+            ).status_code == status.HTTP_401_UNAUTHORIZED
 
             # 2. Member token rejected on protected admin session with 403 Forbidden
             resp = client.get(
@@ -362,4 +390,66 @@ class TestAdminEndpoints:
             assert resp.status_code == status.HTTP_200_OK
             assert resp.json()["username"] == "adm_user"
 
+    def test_standard_login_checks_password_and_signup_cannot_join_existing_workspace(
+        self, app: FastAPI
+    ) -> None:
+        import sqlite3
 
+        with TestClient(app) as client:
+            registration = client.post(
+                "/api/v1/auth/register",
+                json={
+                    "username": "owner",
+                    "email": "owner@example.com",
+                    "password": "OwnerPrivatePassword123!",
+                    "organization_name": "Private Workspace",
+                },
+            )
+            assert registration.status_code == status.HTTP_201_CREATED
+            db_path = app.state.settings.database_url.removeprefix("sqlite+aiosqlite:///")
+            with sqlite3.connect(db_path) as connection:
+                connection.execute("UPDATE users SET role = 'MEMBER' WHERE username = 'owner'")
+                connection.commit()
+            assert client.post(
+                "/api/v1/auth/login", json={"username": "owner"}
+            ).status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+            assert client.post(
+                "/api/v1/auth/login",
+                json={"username": "owner", "password": "wrong"},
+            ).status_code == status.HTTP_401_UNAUTHORIZED
+            assert client.post(
+                "/api/v1/auth/login",
+                json={"username": "owner", "password": "OwnerPrivatePassword123!"},
+            ).status_code == status.HTTP_200_OK
+            assert client.post(
+                "/api/v1/auth/admin/login",
+                json={"username": "owner", "password": "OwnerPrivatePassword123!"},
+            ).status_code == status.HTTP_403_FORBIDDEN
+            assert client.post(
+                "/api/v1/auth/register",
+                json={
+                    "username": "intruder",
+                    "email": "intruder@example.com",
+                    "password": "IntruderPrivatePassword123!",
+                    "organization_name": "Private Workspace",
+                },
+            ).status_code == status.HTTP_409_CONFLICT
+
+
+def test_password_hashes_are_salted_and_legacy_accounts_fail_closed() -> None:
+    from app.auth.passwords import hash_password, verify_password
+
+    first = hash_password("A private password 123")
+    second = hash_password("A private password 123")
+    assert first != second
+    assert "A private password 123" not in first
+    assert verify_password("A private password 123", first)
+    assert not verify_password("wrong", first)
+    assert not verify_password("anything", None)
+
+
+def test_production_does_not_publish_api_documentation() -> None:
+    app = create_app(Settings(environment="production", debug=False))
+    assert app.docs_url is None
+    assert app.redoc_url is None
+    assert app.openapi_url is None

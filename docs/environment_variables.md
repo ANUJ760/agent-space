@@ -123,6 +123,40 @@ All settings can be specified via environment variables or a `.env` file loaded 
 
 ---
 
+## 10b. User-Supplied Agent Keys (BYOK) — `DEFAULT_AGENT_*`
+
+Agents can run with a key the user supplies themselves. The key is held in the
+user's browser and sent directly to the provider; this backend never receives or
+persists it. These variables only control what the UI pre-selects.
+
+| Variable | Type | Default | Required in Prod | Description |
+|---|---|---|---|---|
+| `DEFAULT_AGENT_PROVIDER` | `gemini` | `gemini` | No | Browser-run provider. |
+| `DEFAULT_AGENT_MODEL` | string | `gemini-3.5-flash` | No | Default model offered when a user adds an agent. Free-tier options include `gemini-3.5-flash`, `gemini-3.5-flash-lite`, and the 2.5 Flash models. Availability depends on the user's Google account and quota. |
+| `GEMINI_API_BASE_URL` | string | `https://generativelanguage.googleapis.com/v1beta` | No | Endpoint the browser calls for Gemini inference. |
+| `USER_SUPPLIED_API_KEYS_ENABLED` | boolean | `true` | No | Set `false` to hide the browser key field and browser-run action. |
+
+The browser-run action sends the prompt and, for project agents, a bounded snapshot of project files directly to Gemini. Proposed file edits are applied to the shared workspace only after a user reviews them. Keys are kept in browser storage, scoped to the signed-in user on that browser; users need to attach a key again on another device.
+
+## 10c. Collaborative project workspaces
+
+| Variable | Default | Production use |
+|---|---|---|
+| `WORKSPACE_ROOT` | `./var/workspaces` | Same mounted persistent path in the API and collaboration service. |
+| `COLLAB_PORT` | `1234` | WebSocket server listener. |
+| `COLLAB_API_URL` | `http://127.0.0.1:8000` | Internal FastAPI URL used to authorize live editing. |
+| `NEXT_PUBLIC_COLLAB_URL` | `ws://localhost:1234` | Browser-facing WSS URL; set at frontend build time. |
+| `GIT_ALLOWED_HOSTS` | `github.com,gitlab.com,bitbucket.org` | Comma-separated HTTPS Git hosts users may push to. |
+| `PUBLIC_WEB_URL` | none | Public web origin allowed by API CORS in production Compose. |
+| `PUBLIC_API_URL` | none | Public API URL embedded in the frontend image at build time. |
+| `PUBLIC_COLLAB_URL` | none | Public WSS URL embedded in the frontend image at build time. |
+| `WORKSPACE_HOST_PATH` | `./var/workspaces` | Host mount path backed by EBS or EFS. |
+
+Git personal access tokens are supplied at push time and are not environment variables.
+See [workspace architecture](workspace_architecture.md) for storage and access details.
+
+---
+
 ## 11. Tool Execution Sandbox (`SANDBOX_*`)
 
 | Variable | Type | Default | Required in Prod | Description |

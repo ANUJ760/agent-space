@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback, useMemo } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import {
@@ -33,9 +33,18 @@ import {
   Workflow,
   Code2,
   ExternalLink,
+  KeyRound,
+  Plus,
 } from "lucide-react";
+import { AgentDialog } from "@/components/agents/agent-dialog";
+import { RunAgentDialog } from "@/components/agents/run-agent-dialog";
 import { apiFetch } from "@/lib/api-client";
-import { Project, ProjectMember, Agent, Task } from "@/types/api";
+import { hasCredential } from "@/lib/agent-credentials";
+import {
+  fetchAgentModelDefaults,
+  FALLBACK_AGENT_MODEL_DEFAULTS,
+} from "@/lib/agent-model-defaults";
+import { Project, ProjectMember, Agent, Task, AgentModelDefaults } from "@/types/api";
 
 interface AuditEvent {
   id: string;
@@ -66,18 +75,29 @@ export default function ProjectWorkspacePage() {
   const [error, setError] = useState<string | null>(null);
   const [taskFilter, setTaskFilter] = useState<string>("ALL");
 
+  // Agent onboarding: the user attaches their own provider key and picks a role.
+  const [agentDialogOpen, setAgentDialogOpen] = useState(false);
+  const [editingAgent, setEditingAgent] = useState<Agent | null>(null);
+  const [runningAgent, setRunningAgent] = useState<Agent | null>(null);
+  const [modelDefaults, setModelDefaults] = useState<AgentModelDefaults>(
+    FALLBACK_AGENT_MODEL_DEFAULTS
+  );
+  // Bumped whenever the browser vault changes so rows re-read stored keys.
+  const [credentialVersion, setCredentialVersion] = useState(0);
+
   const fetchProjectDetails = useCallback(async () => {
     if (!projectId) return;
     setIsLoading(true);
     setError(null);
     try {
-      const [projData, membersData, agentsData, tasksData, eventsData] =
+      const [projData, membersData, agentsData, tasksData, eventsData, defaultsData] =
         await Promise.all([
           apiFetch<Project>(`/api/v1/projects/${projectId}`),
           apiFetch<ProjectMember[]>(`/api/v1/projects/${projectId}/members`).catch(() => []),
           apiFetch<Agent[]>(`/api/v1/projects/${projectId}/agents`).catch(() => []),
           apiFetch<Task[]>(`/api/v1/projects/${projectId}/tasks`).catch(() => []),
           apiFetch<AuditEvent[]>(`/api/v1/projects/${projectId}/audit-events`).catch(() => []),
+          fetchAgentModelDefaults(),
         ]);
 
       setProject(projData);
@@ -85,6 +105,7 @@ export default function ProjectWorkspacePage() {
       setAgents(agentsData || []);
       setTasks(tasksData || []);
       setAuditEvents(eventsData || []);
+      setModelDefaults(defaultsData);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load project details");
     } finally {
@@ -95,6 +116,14 @@ export default function ProjectWorkspacePage() {
   useEffect(() => {
     fetchProjectDetails();
   }, [fetchProjectDetails]);
+
+  const hasAgentKey = useMemo(() => {
+    const map: Record<string, boolean> = {};
+    agents.forEach((agent) => {
+      map[agent.id] = hasCredential(agent.id);
+    });
+    return map;
+  }, [agents, credentialVersion]);
 
   if (isLoading) {
     return (
@@ -153,6 +182,7 @@ export default function ProjectWorkspacePage() {
         </Link>
 
         <div className="flex items-center gap-2">
+          <Link href={`/projects/${project.id}/files`}><Button variant="outline" size="sm" className="gap-1.5 text-xs rounded-none"><Code2 className="w-4 h-4" /> Open files</Button></Link>
           <Button
             variant="outline"
             size="sm"
@@ -193,7 +223,7 @@ export default function ProjectWorkspacePage() {
                 </Badge>
               </div>
               <p className="text-xs font-mono text-muted-foreground">
-                repository: <span className="text-primary font-semibold">git.agentspace.local/{project.slug}.git</span>
+                repository: <span className="text-primary font-semibold">{project.repository_url || "Not connected yet"}</span>
               </p>
             </div>
           </div>
@@ -367,14 +397,34 @@ export default function ProjectWorkspacePage() {
                   </div>
                   <CardDescription>Specialized autonomous agents executing coding, research, and review</CardDescription>
                 </div>
-                <Badge variant="outline" className="border-violet-500/40 text-violet-400 font-mono text-[10px]">
-                  {agents.length} Standby / Active
-                </Badge>
+                <div className="flex items-center gap-2">
+                  <Badge variant="outline" className="border-violet-500/40 text-violet-400 font-mono text-[10px]">
+                    {agents.length} Standby / Active
+                  </Badge>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => { setEditingAgent(null); setAgentDialogOpen(true); }}
+                    className="gap-1.5 h-7 text-xs"
+                  >
+                    <Plus className="w-3 h-3" />
+                    <span>Add Agent</span>
+                  </Button>
+                </div>
               </CardHeader>
               <CardContent className="space-y-2.5">
                 {agents.length === 0 ? (
-                  <div className="p-6 text-center text-xs text-muted-foreground border border-dashed border-border/60">
-                    No autonomous agents assigned yet. Launch agents from the Task Kanban board.
+                  <div className="p-6 text-center text-xs text-muted-foreground border border-dashed border-border/60 space-y-3">
+                    <p>No autonomous agents assigned to this project yet.</p>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => { setEditingAgent(null); setAgentDialogOpen(true); }}
+                      className="gap-1.5"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>Add Agent</span>
+                    </Button>
                   </div>
                 ) : (
                   agents.map((ag) => (
@@ -392,12 +442,30 @@ export default function ProjectWorkspacePage() {
                             <span className="w-1.5 h-1.5 rounded-full bg-violet-400" title="Autonomous Agent" />
                           </div>
                           <div className="text-[10px] text-muted-foreground font-mono">
-                            model: <span className="text-foreground">{ag.model || "llama3.1:8b"}</span>
+                            model: <span className="text-foreground">{ag.model || modelDefaults.model}</span>
                           </div>
                         </div>
                       </div>
 
                       <div className="flex items-center gap-2">
+                        <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => { setEditingAgent(ag); setAgentDialogOpen(true); }}>Edit</Button>
+                        {modelDefaults.user_supplied_keys_enabled && ag.model_provider === "gemini" && <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => setRunningAgent(ag)}>Run</Button>}
+                        <Badge
+                          variant="outline"
+                          title={
+                            hasAgentKey[ag.id]
+                              ? "API key stored in this browser"
+                              : "No API key stored in this browser"
+                          }
+                          className={`text-[9px] font-mono gap-1 ${
+                            hasAgentKey[ag.id]
+                              ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-400"
+                              : "border-amber-500/40 bg-amber-500/10 text-amber-400"
+                          }`}
+                        >
+                          <KeyRound className="w-2.5 h-2.5" />
+                          {hasAgentKey[ag.id] ? "KEY SET" : "NO KEY"}
+                        </Badge>
                         <Badge
                           variant="outline"
                           className={`text-[9px] font-mono ${
@@ -654,6 +722,34 @@ export default function ProjectWorkspacePage() {
           </Card>
         </div>
       )}
+
+      <AgentDialog
+        isOpen={agentDialogOpen}
+        onClose={() => setAgentDialogOpen(false)}
+        projects={project ? [project] : []}
+        defaults={modelDefaults}
+        agent={editingAgent}
+        presetProjectId={projectId}
+        onSaved={(saved, created) => {
+          setAgents((prev) => {
+            const next = created
+              ? [saved, ...prev]
+              : prev.map((agent) => (agent.id === saved.id ? saved : agent));
+            return next.sort((a, b) => {
+              // Keep project-scoped agents visible alongside org-wide ones.
+              const aScoped = a.project_id === projectId ? 0 : 1;
+              const bScoped = b.project_id === projectId ? 0 : 1;
+              return aScoped - bScoped;
+            });
+          });
+          setCredentialVersion((v) => v + 1);
+        }}
+        onDeleted={(removed) => {
+          setAgents((prev) => prev.filter((agent) => agent.id !== removed.id));
+          setCredentialVersion((v) => v + 1);
+        }}
+      />
+      <RunAgentDialog agent={runningAgent} project={project} onClose={() => setRunningAgent(null)} />
     </div>
   );
 }

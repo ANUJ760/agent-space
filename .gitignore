@@ -88,6 +88,7 @@ desktop.ini
 
 # Temporal & Ephemeral
 .temporal/
+var/workspaces/
 tmp/
 *.log
 

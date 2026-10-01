@@ -2,11 +2,9 @@
 
 import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
 import { useAuth } from "@/lib/auth-context";
 import { AuthThreeAnimation } from "@/components/canvas/AuthThreeAnimation";
 import {
-  Shield,
   LogIn,
   AlertCircle,
   UserPlus,
@@ -16,7 +14,6 @@ import {
   Mail,
   Lock,
   Building2,
-  ArrowRight,
 } from "lucide-react";
 
 type AuthMode = "signin" | "signup";
@@ -77,7 +74,7 @@ export default function LoginPage() {
         displayName: signupFullName.trim() || undefined,
         username: signupUsername.trim(),
         email: signupEmail.trim(),
-        password: signupPassword.trim() || undefined,
+        password: signupPassword,
         organizationName: signupOrg.trim() || undefined,
       });
     } catch (err) {
@@ -281,6 +278,8 @@ export default function LoginPage() {
                         type={showSignupPassword ? "text" : "password"}
                         value={signupPassword}
                         onChange={(e) => setSignupPassword(e.target.value)}
+                        required
+                        minLength={8}
                         className="w-full px-4 py-3 text-sm font-medium rounded-2xl border border-zinc-700 bg-zinc-900/95 text-white placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-violet-400 focus:border-violet-400 hover:border-zinc-500 transition-all pr-12 shadow-inner"
                         placeholder="••••••••"
                       />
@@ -335,14 +334,6 @@ export default function LoginPage() {
               </button>
             )}
 
-            <Link
-              href="/admin/login"
-              className="text-zinc-300 hover:text-amber-400 transition-colors flex items-center gap-1.5 font-bold"
-            >
-              <Shield className="w-3.5 h-3.5 text-amber-400" />
-              <span>Admin Portal</span>
-              <ArrowRight className="w-3 h-3 ml-0.5 text-amber-400" />
-            </Link>
           </div>
         </div>
       </div>

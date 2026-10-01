@@ -1,9 +1,11 @@
 """Project management endpoints."""
 
+import asyncio
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Response, status
+from fastapi import APIRouter, Depends, Query, Response, status
+from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import CurrentActorDep, Permission, Role, authorize_project_access
@@ -19,6 +21,7 @@ from app.schemas.project import (
     ProjectSummaryResponse,
     ProjectUpdate,
 )
+from app.services import workspace
 
 router = APIRouter(tags=["projects"])
 
@@ -61,6 +64,7 @@ async def create_project(
         created_by_id=actor.id,
     )
     created_project = await project_repo.create(project)
+    await asyncio.to_thread(workspace.create_workspace, created_project.id, created_project.default_branch)
 
     # Automatically assign the creator as PROJECT_OWNER
     owner_member = ProjectMember(
@@ -170,6 +174,7 @@ async def delete_project(
     assert project is not None
 
     await project_repo.delete(project)
+    await asyncio.to_thread(workspace.remove_workspace, project_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
@@ -201,3 +206,109 @@ async def get_project_summary(
         agent_count=0,
         status=project.status,
     )
+
+
+class WorkspaceFileCreate(BaseModel):
+    path: str = Field(min_length=1, max_length=240)
+    content: str = Field(default="", max_length=1024 * 1024)
+
+
+class CheckpointRequest(BaseModel):
+    message: str = Field(default="Workspace checkpoint", min_length=1, max_length=200)
+
+
+class PushRequest(BaseModel):
+    token: str = Field(min_length=1, max_length=2048)
+    username: str = Field(default="x-access-token", min_length=1, max_length=100)
+
+
+async def _authorized_project(
+    project_id: uuid.UUID, actor: CurrentActorDep, session: AsyncSession, permission: Permission
+) -> Project:
+    project = await ProjectRepository(session).get_by_id(project_id)
+    authorize_project_access(actor, project, permission)
+    assert project is not None
+    await asyncio.to_thread(workspace.create_workspace, project.id, project.default_branch)
+    return project
+
+
+@router.get("/{project_id}/workspace/access")
+async def workspace_access(
+    project_id: uuid.UUID,
+    actor: CurrentActorDep,
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+) -> dict[str, bool]:
+    """Authorization probe for the separate Yjs collaboration server."""
+    await _authorized_project(project_id, actor, session, Permission.TASK_UPDATE)
+    return {"can_edit": True}
+
+
+@router.get("/{project_id}/workspace/files")
+async def list_workspace_files(
+    project_id: uuid.UUID,
+    actor: CurrentActorDep,
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+) -> list[dict[str, str | int]]:
+    await _authorized_project(project_id, actor, session, Permission.PROJECT_READ)
+    return await asyncio.to_thread(workspace.list_files, project_id)
+
+
+@router.get("/{project_id}/workspace/file")
+async def get_workspace_file(
+    project_id: uuid.UUID,
+    actor: CurrentActorDep,
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+    path: str = Query(min_length=1, max_length=240),
+) -> dict[str, str]:
+    await _authorized_project(project_id, actor, session, Permission.PROJECT_READ)
+    return {"path": path, "content": await asyncio.to_thread(workspace.read_file, project_id, path)}
+
+
+@router.post("/{project_id}/workspace/files", status_code=status.HTTP_201_CREATED)
+async def create_workspace_file(
+    project_id: uuid.UUID,
+    payload: WorkspaceFileCreate,
+    actor: CurrentActorDep,
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+) -> dict[str, str]:
+    await _authorized_project(project_id, actor, session, Permission.TASK_UPDATE)
+    await asyncio.to_thread(workspace.write_file, project_id, payload.path, payload.content, create_only=True)
+    return {"path": payload.path}
+
+
+@router.get("/{project_id}/workspace/checkpoints")
+async def list_checkpoints(
+    project_id: uuid.UUID,
+    actor: CurrentActorDep,
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+) -> list[dict[str, str]]:
+    await _authorized_project(project_id, actor, session, Permission.PROJECT_READ)
+    return await asyncio.to_thread(workspace.history, project_id)
+
+
+@router.post("/{project_id}/workspace/checkpoints")
+async def create_checkpoint(
+    project_id: uuid.UUID,
+    payload: CheckpointRequest,
+    actor: CurrentActorDep,
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+) -> dict[str, str | bool]:
+    await _authorized_project(project_id, actor, session, Permission.TASK_UPDATE)
+    return await asyncio.to_thread(workspace.checkpoint, project_id, payload.message, str(actor.id))
+
+
+@router.post("/{project_id}/workspace/push")
+async def push_workspace(
+    project_id: uuid.UUID,
+    payload: PushRequest,
+    actor: CurrentActorDep,
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+) -> dict[str, str]:
+    project = await _authorized_project(project_id, actor, session, Permission.PROJECT_UPDATE)
+    if not project.repository_url:
+        from app.errors import BadRequestError
+
+        raise BadRequestError("Configure a repository URL for this project first.")
+    await asyncio.to_thread(workspace.checkpoint, project_id, "Checkpoint before push", str(actor.id))
+    commit = await asyncio.to_thread(workspace.push, project_id, project.repository_url, project.default_branch, payload.token, payload.username)
+    return {"commit": commit}

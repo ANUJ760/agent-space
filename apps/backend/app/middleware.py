@@ -326,10 +326,17 @@ class RequestSizeLimitMiddleware(BaseHTTPMiddleware):
 class RateLimitMiddleware(BaseHTTPMiddleware):
     """Sliding-window IP rate limiter to protect endpoints against DoS and brute-force."""
 
-    def __init__(self, app: ASGIApp, max_requests: int = 1000, window_seconds: int = 60) -> None:
+    def __init__(
+        self,
+        app: ASGIApp,
+        max_requests: int = 1000,
+        window_seconds: int = 60,
+        max_auth_requests: int = 20,
+    ) -> None:
         super().__init__(app)
         self.max_requests = max_requests
         self.window_seconds = window_seconds
+        self.max_auth_requests = max_auth_requests
         self._history: dict[str, list[float]] = {}
         self._lock = asyncio.Lock()
 
@@ -340,6 +347,11 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
 
         client_ip = request.client.host if request.client else "127.0.0.1"
         now = time.monotonic()
+        is_auth_attempt = request.method == "POST" and request.url.path in {
+            "/api/v1/auth/login",
+            "/api/v1/auth/admin/login",
+            "/api/v1/auth/register",
+        }
 
         async with self._lock:
             history = self._history.setdefault(client_ip, [])
@@ -356,6 +368,18 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                     },
                 )
             history.append(now)
+            if is_auth_attempt:
+                auth_history = self._history.setdefault(f"{client_ip}:auth", [])
+                auth_history[:] = [t for t in auth_history if t > cutoff]
+                if len(auth_history) >= self.max_auth_requests:
+                    return JSONResponse(
+                        status_code=429,
+                        headers={"Retry-After": str(self.window_seconds)},
+                        content={
+                            "code": "RATE_LIMIT_EXCEEDED",
+                            "message": "Too many authentication attempts. Try again later.",
+                        },
+                    )
+                auth_history.append(now)
 
         return await call_next(request)
-

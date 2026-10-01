@@ -178,44 +178,69 @@ PYTHONPATH=apps/backend python3 -m alembic upgrade head
 PYTHONPATH=apps/backend python3 scripts/seed_database.py
 ```
 
-### Step 5: Launch Backend & Frontend
+### Step 5: Launch Backend, Collaboration Server & Frontend
 
 **Terminal 1 (Backend API):**
 ```bash
 PYTHONPATH=apps/backend:. python3 -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-**Terminal 2 (Frontend UI):**
+**Terminal 2 (Live collaboration):**
 ```bash
 npm install
+npm run dev --workspace=@agent-space/collab
+```
+
+**Terminal 3 (Frontend UI):**
+```bash
 npm run dev --workspace=@agent-space/frontend
 ```
 
 Open **[http://localhost:3000](http://localhost:3000)** in your browser.
 
+Each new project gets a Git-backed folder under `WORKSPACE_ROOT` (`./var/workspaces` locally).
+Open **Files** from a project to edit together, see collaborators' cursors, run browser agents
+against the files, review proposed edits, and create Git checkpoints. Changed workspaces also
+receive a checkpoint every five minutes while the backend runs. Push requires a configured
+HTTPS repository and a Git token supplied at push time; the token is not stored.
+
+For AWS, mount a persistent EBS volume on a single host (or an EFS access point shared by
+the API and collaboration service) at the same `WORKSPACE_ROOT` path. Set `PUBLIC_API_URL`
+and `PUBLIC_COLLAB_URL` to externally reachable HTTPS/WSS addresses before building the
+frontend. See [workspace architecture](docs/workspace_architecture.md).
+
 ---
 
-## 5. Seeded Credentials & Access Matrix
+## 5. Seeded Accounts & Access Matrix
 
-The seeding script provisions the following accounts:
+The seeding script provisions the following accounts without preset passwords.
+After applying migrations, set a password for each account you want to use:
+
+```bash
+PYTHONPATH=apps/backend:. python3 scripts/set_user_password.py admin
+PYTHONPATH=apps/backend:. python3 scripts/set_user_password.py lead
+```
+
+The command prompts without echoing the password. Existing accounts created
+before password hashing also need a password set this way.
 
 ### 1. Protected Administrator Portal
 - **URL**: [http://localhost:3000/admin/login](http://localhost:3000/admin/login)
 - **Direct Protected Endpoint**: `POST /api/v1/auth/admin/login`
 
-| Username | Password | Role | Constraints |
-| :--- | :--- | :--- | :--- |
-| **`admin`** | `AdminPassword123!` | `ORG_ADMIN` | **Strictly no signup options.** Cannot authenticate via standard `/login` route. |
+| Username | Role | Constraints |
+| :--- | :--- | :--- |
+| **`admin`** | `ORG_ADMIN` | No signup on admin login. Cannot authenticate via standard `/login` route. |
 
 ### 2. Standard Workspace Members
 - **URL**: [http://localhost:3000/login](http://localhost:3000/login)
 - **Direct Endpoint**: `POST /api/v1/auth/login`
 
-| Username | Password | Role | Permissions |
-| :--- | :--- | :--- | :--- |
-| **`lead`** | `LeadPassword123!` | `PROJECT_OWNER` | Full project management, task creation, approval gates |
-| **`developer`** | `DeveloperPassword123!` | `MEMBER` | Claim tasks, pair program with AI agents, review code |
-| **`auditor`** | `AuditorPassword123!` | `VIEWER` | Read-only inspection of audit trail and compliance logs |
+| Username | Role | Permissions |
+| :--- | :--- | :--- |
+| **`lead`** | `PROJECT_OWNER` | Full project management, task creation, approval gates |
+| **`developer`** | `MEMBER` | Claim tasks, pair program with AI agents, review code |
+| **`auditor`** | `VIEWER` | Read-only inspection of audit trail and compliance logs |
 
 ### 3. Autonomous AI Agents
 - **`DevOps-Agent-01`** (`devops-agent-01`): Powered by `claude-3-5-sonnet`, equipped with `ci_cd`, `code_review`, `container_orchestration`, and `security_scanning` capabilities.

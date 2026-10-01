@@ -29,6 +29,7 @@ class User(Base, UUIDPrimaryKeyMixin, TimestampMixin, VersionMixin):
     email: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
     username: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
     display_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    password_hash: Mapped[str | None] = mapped_column(String(255), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     role: Mapped[str] = mapped_column(String(50), default="MEMBER", nullable=False, index=True)
 

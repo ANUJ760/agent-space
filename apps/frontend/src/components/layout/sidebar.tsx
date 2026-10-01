@@ -11,8 +11,10 @@ import {
   LayoutDashboard,
   Users,
   ShieldCheck,
+  Shield,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/lib/auth-context";
 
 interface NavItem {
   title: string;
@@ -32,6 +34,10 @@ const navItems: NavItem[] = [
 
 export function Sidebar() {
   const pathname = usePathname();
+  const { user } = useAuth();
+  const items = user?.role === "ORG_ADMIN" || user?.role === "SYSTEM_ADMIN"
+    ? [...navItems, { title: "Admin", href: "/admin", icon: Shield }]
+    : navItems;
 
   return (
     <aside className="w-60 border-r border-border/70 bg-card/90 backdrop-blur-md flex flex-col h-screen fixed left-0 top-0 z-30">
@@ -54,7 +60,7 @@ export function Sidebar() {
           Workspace
         </div>
         <nav className="space-y-0.5">
-          {navItems.map((item) => {
+          {items.map((item) => {
             const Icon = item.icon;
             const isActive =
               item.href === "/"

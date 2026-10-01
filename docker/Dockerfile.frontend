@@ -1,72 +1,23 @@
-# ==============================================================================
-# Agent Space - Production Frontend Dockerfile (Multi-stage & Hardened)
-# ==============================================================================
-# Security features:
-# - Multi-stage build (deps -> builder -> runner)
-# - Minimal Alpine Linux base image (node:20-alpine)
-# - Pinned dependencies via npm ci and lockfile
-# - Dedicated unprivileged system user/group (nextjs:10001)
-# - Non-root execution
-# - Active health check endpoint validation
-# - No secrets or sensitive configuration baked in
-# ==============================================================================
-
-# --- Stage 1: Install dependencies ---
-FROM node:20-alpine AS deps
-
-# Check https://github.com/nodejs/docker-node/tree/b4117f9333da4138b03a546ec926ef50a31506c3#nodealpine to understand why libc6-compat might be needed.
-RUN apk add --no-cache libc6-compat
-
+FROM node:24-alpine AS builder
 WORKDIR /app
+COPY package.json package-lock.json ./
+COPY apps/frontend/package.json apps/frontend/package.json
+COPY apps/collab/package.json apps/collab/package.json
+RUN npm ci --ignore-scripts
+COPY apps/frontend apps/frontend
+ARG NEXT_PUBLIC_API_URL
+ARG NEXT_PUBLIC_COLLAB_URL
+ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+ENV NEXT_PUBLIC_COLLAB_URL=$NEXT_PUBLIC_COLLAB_URL
+RUN npm run build --workspace=@agent-space/frontend
 
-# Copy dependency manifests
-COPY apps/frontend/package.json ./package.json
-COPY apps/frontend/package-lock.json* ./package-lock.json
-
-# Install dependencies strictly from lockfile
-RUN if [ -f package-lock.json ]; then npm ci --ignore-scripts; else npm install --ignore-scripts; fi
-
-# --- Stage 2: Build Next.js application ---
-FROM node:20-alpine AS builder
-
+FROM node:24-alpine
 WORKDIR /app
-
-COPY --from=deps /app/node_modules ./node_modules
-COPY apps/frontend ./
-
-ENV NEXT_TELEMETRY_DISABLED=1 \
-    NODE_ENV=production
-
-RUN npm run build
-
-# --- Stage 3: Hardened Production Runner ---
-FROM node:20-alpine AS runner
-
-WORKDIR /app
-
-# Security hardening: Create non-root system group and user
-RUN addgroup --system --gid 10001 nodejs && \
-    adduser --system --uid 10001 nextjs
-
-ENV NODE_ENV=production \
-    NEXT_TELEMETRY_DISABLED=1 \
-    PORT=3000 \
-    HOSTNAME="0.0.0.0"
-
-# Copy built application assets with restricted permissions
-COPY --from=builder --chown=nextjs:nodejs /app/public ./public
-COPY --from=builder --chown=nextjs:nodejs /app/.next ./.next
-COPY --from=builder --chown=nextjs:nodejs /app/node_modules ./node_modules
-COPY --from=builder --chown=nextjs:nodejs /app/package.json ./package.json
-
-# Switch to unprivileged user
-USER nextjs
-
-# Expose Next.js frontend port
+RUN addgroup -S -g 10001 nodejs && adduser -S -u 10001 -G nodejs nextjs
+COPY --from=builder /app/package.json ./package.json
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/apps/frontend ./apps/frontend
+ENV NODE_ENV=production
+USER 10001:10001
 EXPOSE 3000
-
-# Health check using Node stdlib http client
-HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-  CMD node -e "require('http').get('http://localhost:3000', (r) => {if (r.statusCode < 500) process.exit(0); else process.exit(1);})" || exit 1
-
-CMD ["npm", "start"]
+CMD ["npm", "run", "start", "--workspace=@agent-space/frontend"]
