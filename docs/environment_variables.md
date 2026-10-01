@@ -123,20 +123,19 @@ All settings can be specified via environment variables or a `.env` file loaded 
 
 ---
 
-## 10b. User-Supplied Agent Keys (BYOK) — `DEFAULT_AGENT_*`
+## 10b. Default and User-Supplied Agent Keys
 
-Agents can run with a key the user supplies themselves. The key is held in the
-user's browser and sent directly to the provider; this backend never receives or
-persists it. These variables only control what the UI pre-selects.
+Users can choose a shared default Gemini agent or create a Gemini, OpenAI, Anthropic, or OpenAI-compatible agent with their own key. Compatible endpoints need browser CORS support. User keys remain in the browser and go directly to their provider. The developer's default key remains on the backend and is used through an authenticated endpoint.
 
 | Variable | Type | Default | Required in Prod | Description |
 |---|---|---|---|---|
-| `DEFAULT_AGENT_PROVIDER` | `gemini` | `gemini` | No | Browser-run provider. |
-| `DEFAULT_AGENT_MODEL` | string | `gemini-3.5-flash` | No | Default model offered when a user adds an agent. Free-tier options include `gemini-3.5-flash`, `gemini-3.5-flash-lite`, and the 2.5 Flash models. Availability depends on the user's Google account and quota. |
-| `GEMINI_API_BASE_URL` | string | `https://generativelanguage.googleapis.com/v1beta` | No | Endpoint the browser calls for Gemini inference. |
+| `DEFAULT_AGENT_PROVIDER` | `gemini` | `gemini` | No | Provider for the shared default agent. |
+| `DEFAULT_AGENT_MODEL` | string | `gemini-2.5-flash` | No | Model for the default agent and planner. Gemini 2.5 Flash is listed in Google's free tier; quotas depend on the Google account. |
+| `DEFAULT_GEMINI_API_KEY` | secret | unset | Yes for default agent and planner | Server-side Gemini key for the shared default agent and automatic project planning. Do not expose in `NEXT_PUBLIC_*`. |
+| `GEMINI_API_BASE_URL` | string | `https://generativelanguage.googleapis.com/v1beta` | No | Gemini endpoint used by the backend default agent and browser Gemini agents. |
 | `USER_SUPPLIED_API_KEYS_ENABLED` | boolean | `true` | No | Set `false` to hide the browser key field and browser-run action. |
 
-The browser-run action sends the prompt and, for project agents, a bounded snapshot of project files directly to Gemini. Proposed file edits are applied to the shared workspace only after a user reviews them. Keys are kept in browser storage, scoped to the signed-in user on that browser; users need to attach a key again on another device.
+The project planner creates tasks from the project brief when a default key is configured. Shared default inference is limited to 60 requests per organization and 20 per user per hour. Assigning a task to an agent starts work in the current browser tab: the planner selects files, the assigned provider generates edits, and Yjs applies them to the live workspace. A Git checkpoint is created, then the task enters review. Keep the task page open during execution. Provider keys are scoped to the signed-in user in browser storage and must be attached again on another device.
 
 ## 10c. Collaborative project workspaces
 

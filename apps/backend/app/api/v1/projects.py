@@ -1,20 +1,27 @@
 """Project management endpoints."""
 
 import asyncio
+import json
+import re
 import uuid
 from typing import Annotated
 
+import httpx
 from fastapi import APIRouter, Depends, Query, Response, status
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import CurrentActorDep, Permission, Role, authorize_project_access
+from app.config import get_settings
 from app.database import get_db_session
 from app.errors import ConflictError, ForbiddenError
 from app.models.project import Project
 from app.models.project_member import ProjectMember
+from app.models.task import Task
+from app.redis import get_redis_client
 from app.repositories.project_member_repo import ProjectMemberRepository
 from app.repositories.project_repo import ProjectRepository
+from app.repositories.task_repo import TaskRepository
 from app.schemas.project import (
     ProjectCreate,
     ProjectResponse,
@@ -64,7 +71,9 @@ async def create_project(
         created_by_id=actor.id,
     )
     created_project = await project_repo.create(project)
-    await asyncio.to_thread(workspace.create_workspace, created_project.id, created_project.default_branch)
+    await asyncio.to_thread(
+        workspace.create_workspace, created_project.id, created_project.default_branch
+    )
 
     # Automatically assign the creator as PROJECT_OWNER
     owner_member = ProjectMember(
@@ -74,7 +83,119 @@ async def create_project(
     )
     await member_repo.create(owner_member)
 
+    # The built-in planner turns a project brief into assignable work immediately.
+    if (
+        get_settings().default_gemini_api_key
+        and get_settings().default_gemini_api_key.get_secret_value().strip()
+    ):
+        try:
+            allowed, _, _ = await get_redis_client().check_rate_limit(
+                f"default-agent:{created_project.organization_id}", 60, 3600
+            )
+            if allowed:
+                await _plan_project(created_project, actor.id, session)
+        except (httpx.HTTPError, ValueError, KeyError, json.JSONDecodeError):
+            # A provider outage must not prevent project creation. The owner can retry.
+            pass
+
     return ProjectResponse.model_validate(created_project)
+
+
+async def _plan_project(project: Project, actor_id: uuid.UUID, session: AsyncSession) -> list[Task]:
+    settings = get_settings()
+    if (
+        not settings.default_gemini_api_key
+        or not settings.default_gemini_api_key.get_secret_value().strip()
+    ):
+        raise ValueError("Default planner is not configured")
+    prompt = (
+        "You are the project planner in a collaborative software workspace. "
+        "Split this project into 3 to 8 concrete tasks that humans or coding agents can take. "
+        "Each task must identify likely relative file paths and a concise acceptance criterion. "
+        'Return JSON only: {"tasks":[{"title":"...","description":"...","files":["relative/path"]}]}. '
+        f"Project: {project.name}\nDescription: {project.description or 'No brief provided'}"
+    )
+    async with httpx.AsyncClient(timeout=60) as client:
+        response = await client.post(
+            f"{settings.gemini_api_base_url.rstrip('/')}/models/{settings.default_agent_model}:generateContent",
+            headers={"x-goog-api-key": settings.default_gemini_api_key.get_secret_value()},
+            json={
+                "contents": [{"parts": [{"text": prompt}]}],
+                "generationConfig": {
+                    "responseMimeType": "application/json",
+                    "maxOutputTokens": 4096,
+                },
+            },
+        )
+    response.raise_for_status()
+    text = "".join(
+        part.get("text", "") for part in response.json()["candidates"][0]["content"]["parts"]
+    )
+    proposed = json.loads(
+        re.sub(r"\s*```$", "", re.sub(r"^```(?:json)?\s*", "", text.strip(), flags=re.IGNORECASE))
+    )["tasks"]
+    if not isinstance(proposed, list) or not proposed:
+        raise ValueError("Planner returned no tasks")
+    repo = TaskRepository(session)
+    created = []
+    for entry in proposed[:8]:
+        if not isinstance(entry, dict) or not isinstance(entry.get("title"), str):
+            continue
+        files = [
+            path for path in entry.get("files", []) if isinstance(path, str) and len(path) <= 255
+        ][:10]
+        task = Task(
+            organization_id=project.organization_id,
+            project_id=project.id,
+            title=entry["title"][:255],
+            description=str(entry.get("description") or "")[:4096],
+            status="TODO",
+            priority="MEDIUM",
+            created_by_id=actor_id,
+            context={"planned_by": "default-gemini", "suggested_files": files},
+        )
+        created.append(await repo.create(task))
+    return created
+
+
+@router.post("/{project_id}/plan")
+async def plan_existing_project(
+    project_id: uuid.UUID,
+    actor: CurrentActorDep,
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+) -> dict[str, int]:
+    from fastapi import HTTPException
+
+    project = await ProjectRepository(session).get_by_id(project_id)
+    authorize_project_access(actor, project, Permission.TASK_CREATE)
+    assert project is not None
+    if await TaskRepository(session).count_by_project(project_id):
+        raise ConflictError(
+            code="PROJECT_ALREADY_PLANNED", message="Project already has tasks", details={}
+        )
+    if (
+        not get_settings().default_gemini_api_key
+        or not get_settings().default_gemini_api_key.get_secret_value().strip()
+    ):
+        raise HTTPException(
+            status_code=503, detail="Set DEFAULT_GEMINI_API_KEY to enable the planner"
+        )
+    allowed, _, retry_after = await get_redis_client().check_rate_limit(
+        f"default-agent:{project.organization_id}", 60, 3600
+    )
+    if not allowed:
+        raise HTTPException(
+            status_code=429,
+            detail="Default agent hourly quota reached",
+            headers={"Retry-After": str(retry_after)},
+        )
+    try:
+        tasks = await _plan_project(project, actor.id, session)
+    except (httpx.HTTPError, ValueError, KeyError, json.JSONDecodeError) as exc:
+        raise HTTPException(
+            status_code=502, detail="Planner could not create tasks; retry later"
+        ) from exc
+    return {"created": len(tasks)}
 
 
 @router.get(
@@ -272,7 +393,9 @@ async def create_workspace_file(
     session: Annotated[AsyncSession, Depends(get_db_session)],
 ) -> dict[str, str]:
     await _authorized_project(project_id, actor, session, Permission.TASK_UPDATE)
-    await asyncio.to_thread(workspace.write_file, project_id, payload.path, payload.content, create_only=True)
+    await asyncio.to_thread(
+        workspace.write_file, project_id, payload.path, payload.content, create_only=True
+    )
     return {"path": payload.path}
 
 
@@ -309,6 +432,15 @@ async def push_workspace(
         from app.errors import BadRequestError
 
         raise BadRequestError("Configure a repository URL for this project first.")
-    await asyncio.to_thread(workspace.checkpoint, project_id, "Checkpoint before push", str(actor.id))
-    commit = await asyncio.to_thread(workspace.push, project_id, project.repository_url, project.default_branch, payload.token, payload.username)
+    await asyncio.to_thread(
+        workspace.checkpoint, project_id, "Checkpoint before push", str(actor.id)
+    )
+    commit = await asyncio.to_thread(
+        workspace.push,
+        project_id,
+        project.repository_url,
+        project.default_branch,
+        payload.token,
+        payload.username,
+    )
     return {"commit": commit}

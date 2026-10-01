@@ -160,14 +160,14 @@ class AgentModelDefaults(BaseModel):
     """
 
     provider: Literal["gemini"] = Field(default="gemini")
-    model: str = Field(default="gemini-3.5-flash")
+    model: str = Field(default="gemini-2.5-flash")
     base_url: str = Field(default="https://generativelanguage.googleapis.com/v1beta")
     user_supplied_keys_enabled: bool = Field(default=True)
     free_tier_models: tuple[str, ...] = (
-        "gemini-3.5-flash",
-        "gemini-3.5-flash-lite",
         "gemini-2.5-flash",
         "gemini-2.5-flash-lite",
+        "gemini-3.5-flash",
+        "gemini-3.5-flash-lite",
     )
 
     @field_validator("base_url")
@@ -280,7 +280,8 @@ class Settings(BaseSettings):
 
     # 10b. User-supplied (BYOK) agent providers — agent inference runs client-side
     default_agent_provider: Literal["gemini"] = "gemini"
-    default_agent_model: str = "gemini-3.5-flash"
+    default_agent_model: str = "gemini-2.5-flash"
+    default_gemini_api_key: SecretStr | None = None
     gemini_api_base_url: str = "https://generativelanguage.googleapis.com/v1beta"
     user_supplied_api_keys_enabled: bool = True
     # Shared workspace volume. Mount an AWS EFS access point here in production.
@@ -314,9 +315,12 @@ class Settings(BaseSettings):
     def require_production_secret(self) -> "Settings":
         if self.environment == "production" and (
             len(self.secret_key.get_secret_value()) < 32
-            or self.secret_key.get_secret_value() == "change-this-to-a-secure-random-32-byte-hex-string-for-prod"
+            or self.secret_key.get_secret_value()
+            == "change-this-to-a-secure-random-32-byte-hex-string-for-prod"
         ):
-            raise ValueError("Production SECRET_KEY must be a unique value of at least 32 characters")
+            raise ValueError(
+                "Production SECRET_KEY must be a unique value of at least 32 characters"
+            )
         return self
 
     @field_validator("cors_origins", mode="before")

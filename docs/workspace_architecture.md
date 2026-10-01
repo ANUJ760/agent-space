@@ -18,9 +18,8 @@ authorization on every file and Git operation.
   Direct edits to a file on that volume are brought into an open live document on a short poll.
 - **FastAPI + PostgreSQL** holds project and permission data and exposes the file browser,
   checkpoint history, Git remote setting and push operations.
-- **Gemini** runs only in the browser with the user's browser-stored API key. A project agent
-  receives a bounded snapshot of workspace text, returns proposed complete file contents,
-  and the user reviews them before they are applied through the same Yjs documents.
+- **Planner agent** uses the developer's `DEFAULT_GEMINI_API_KEY` on FastAPI. Project creation asks Gemini for an initial task breakdown. If the key or provider is unavailable, the project still opens and the task board offers a retry after configuration.
+- **Assigned agents** use OpenAI, Anthropic, Gemini, or an OpenAI-compatible API with each user's browser-stored API key, or the shared default Gemini agent through FastAPI. The default key never reaches the browser. Task assignment in the browser asks the planner to choose files, sends a bounded file snapshot to the worker model, and applies its returned file contents through Yjs. The board polls task progress every three seconds and moves completed edits to review. The browser tab must stay open while a task runs; there is no durable background worker for user keys.
 - **Git** records the folder history. Users can commit a named checkpoint on demand. The
   backend commits changed folders every five minutes. Push uses an HTTPS personal access
   token once, passed to Git through `GIT_ASKPASS` and never saved in Git config or the database.

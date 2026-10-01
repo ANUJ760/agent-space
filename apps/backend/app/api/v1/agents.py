@@ -3,7 +3,9 @@
 import uuid
 from typing import Annotated
 
+import httpx
 from fastapi import APIRouter, Depends, Query, Response, status
+from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.dependencies import CurrentActorDep
@@ -16,6 +18,7 @@ from app.config import get_settings
 from app.database import get_db_session
 from app.errors import ConflictError, ForbiddenError, NotFoundError
 from app.models.agent import Agent
+from app.redis import get_redis_client
 from app.repositories.agent_repo import AgentRepository
 from app.repositories.project_repo import ProjectRepository
 from app.schemas.agent import (
@@ -51,7 +54,74 @@ async def get_agent_model_defaults(
         base_url=defaults.base_url,
         user_supplied_keys_enabled=defaults.user_supplied_keys_enabled,
         free_tier_models=list(defaults.free_tier_models),
+        default_agent_available=bool(
+            get_settings().default_gemini_api_key
+            and get_settings().default_gemini_api_key.get_secret_value().strip()
+        ),
     )
+
+
+class DefaultAgentRequest(BaseModel):
+    prompt: str = Field(min_length=1, max_length=100000)
+    system_prompt: str | None = Field(default=None, max_length=8192)
+    max_tokens: int = Field(default=8192, ge=1, le=16384)
+
+
+@router.post("/agents/default/generate")
+async def run_default_agent(payload: DefaultAgentRequest, actor: CurrentActorDep) -> dict[str, str]:
+    """Run the shared Gemini agent without exposing the developer's key."""
+    from fastapi import HTTPException
+
+    settings = get_settings()
+    if actor.organization_id is None:
+        raise HTTPException(status_code=403, detail="Organization membership required")
+    if (
+        not settings.default_gemini_api_key
+        or not settings.default_gemini_api_key.get_secret_value().strip()
+    ):
+        raise HTTPException(status_code=503, detail="Default agent is not configured")
+    allowed, _, retry_after = await get_redis_client().check_rate_limit(
+        f"default-agent:{actor.organization_id}", 60, 3600
+    )
+    if not allowed:
+        raise HTTPException(
+            status_code=429,
+            detail="Default agent hourly quota reached",
+            headers={"Retry-After": str(retry_after)},
+        )
+    user_allowed, _, user_retry = await get_redis_client().check_rate_limit(
+        f"default-agent-user:{actor.id}", 20, 3600
+    )
+    if not user_allowed:
+        raise HTTPException(
+            status_code=429,
+            detail="Your default agent hourly quota reached",
+            headers={"Retry-After": str(user_retry)},
+        )
+    body: dict = {
+        "contents": [{"role": "user", "parts": [{"text": payload.prompt}]}],
+        "generationConfig": {"temperature": 0.2, "maxOutputTokens": payload.max_tokens},
+    }
+    if payload.system_prompt:
+        body["systemInstruction"] = {"parts": [{"text": payload.system_prompt}]}
+    try:
+        async with httpx.AsyncClient(timeout=120) as client:
+            response = await client.post(
+                f"{settings.gemini_api_base_url.rstrip('/')}/models/{settings.default_agent_model}:generateContent",
+                headers={"x-goog-api-key": settings.default_gemini_api_key.get_secret_value()},
+                json=body,
+            )
+        response.raise_for_status()
+        data = response.json()
+    except (httpx.HTTPError, ValueError) as exc:
+        raise HTTPException(
+            status_code=502, detail="Default agent provider request failed"
+        ) from exc
+    parts = (data.get("candidates") or [{}])[0].get("content", {}).get("parts", [])
+    output = "".join(part.get("text", "") for part in parts)
+    if not output:
+        raise HTTPException(status_code=502, detail="Default agent returned no text")
+    return {"text": output, "model": settings.default_agent_model}
 
 
 @router.get(

@@ -13,7 +13,7 @@
 
 const STORAGE_KEY = "agentspace.agent_credentials.v2";
 
-export type AgentProvider = "gemini";
+export type AgentProvider = "gemini" | "openai" | "anthropic" | "openai-compatible";
 
 export interface AgentCredential {
   agentId: string;

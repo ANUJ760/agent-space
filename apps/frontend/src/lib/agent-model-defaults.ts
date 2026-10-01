@@ -16,6 +16,7 @@ export const FALLBACK_AGENT_MODEL_DEFAULTS: AgentModelDefaults = {
   base_url: GEMINI_DEFAULT_BASE_URL,
   user_supplied_keys_enabled: true,
   free_tier_models: [...GEMINI_FREE_TIER_MODELS],
+  default_agent_available: false,
 };
 
 let cached: AgentModelDefaults | null = null;

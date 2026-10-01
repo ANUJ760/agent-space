@@ -24,7 +24,10 @@ import {
 } from "lucide-react";
 import { CreateTaskDialog } from "@/components/tasks/create-task-dialog";
 import { apiFetch } from "@/lib/api-client";
-import { Task, Project } from "@/types/api";
+import { getCredential } from "@/lib/agent-credentials";
+import { runAssignedTask } from "@/lib/task-agent-runner";
+import { fetchAgentModelDefaults } from "@/lib/agent-model-defaults";
+import { Task, Project, Agent } from "@/types/api";
 
 const KANBAN_COLUMNS: Array<{
   status: Task["status"];
@@ -46,6 +49,10 @@ export default function ProjectKanbanPage() {
 
   const [project, setProject] = useState<Project | null>(null);
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [agents, setAgents] = useState<Agent[]>([]);
+  const [selectedAgents, setSelectedAgents] = useState<Record<string, string>>({});
+  const [runningTaskId, setRunningTaskId] = useState<string | null>(null);
+  const [plannerAvailable, setPlannerAvailable] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -56,12 +63,16 @@ export default function ProjectKanbanPage() {
     setIsLoading(true);
     setError(null);
     try {
-      const [proj, taskList] = await Promise.all([
+      const [proj, taskList, agentList, defaults] = await Promise.all([
         apiFetch<Project>(`/api/v1/projects/${projectId}`),
         apiFetch<Task[]>(`/api/v1/projects/${projectId}/tasks`),
+        apiFetch<Agent[]>(`/api/v1/projects/${projectId}/agents`),
+        fetchAgentModelDefaults(true),
       ]);
       setProject(proj);
       setTasks(taskList || []);
+      setAgents(agentList || []);
+      setPlannerAvailable(Boolean(defaults.default_agent_available));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load project tasks");
     } finally {
@@ -72,6 +83,56 @@ export default function ProjectKanbanPage() {
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  useEffect(() => {
+    if (!projectId) return;
+    const timer = window.setInterval(async () => {
+      try { setTasks(await apiFetch<Task[]>(`/api/v1/projects/${projectId}/tasks`)); } catch { /* Keep the last visible state. */ }
+    }, 3000);
+    return () => window.clearInterval(timer);
+  }, [projectId]);
+
+  const handleAssignAndRun = async (task: Task) => {
+    if (!project) return;
+    const agent = agents.find((entry) => entry.id === (selectedAgents[task.id] || task.assigned_agent_id));
+    if (!agent) { setActionError("Choose an agent for this task."); return; }
+    if (!plannerAvailable) { setActionError("Set DEFAULT_GEMINI_API_KEY to enable planner coordination."); return; }
+    if (agent.model_provider !== "default" && !getCredential(agent.id)) { setActionError(`Attach ${agent.name}'s API key on the Agents page in this browser.`); return; }
+    setRunningTaskId(task.id);
+    setActionError(null);
+    try {
+      let assigned = task;
+      if (task.status === "TODO") {
+        assigned = await apiFetch<Task>(`/api/v1/tasks/${task.id}/assign`, { method: "POST", body: JSON.stringify({ assignee_type: "AGENT", assignee_id: agent.id }) });
+      }
+      await runAssignedTask(project, assigned, agent);
+      await fetchData();
+    } catch (cause) {
+      const message = cause instanceof Error ? cause.message : "Agent task failed";
+      setActionError(message);
+      try { await apiFetch(`/api/v1/tasks/${task.id}`, { method: "PATCH", body: JSON.stringify({ error_message: message.slice(0, 2048), result: { stage: "Needs attention" } }) }); } catch { /* Surface the original error. */ }
+      await fetchData();
+    } finally { setRunningTaskId(null); }
+  };
+
+  const handlePlan = async () => {
+    setActionError(null);
+    try {
+      await apiFetch(`/api/v1/projects/${projectId}/plan`, { method: "POST" });
+      await fetchData();
+    } catch (cause) { setActionError(cause instanceof Error ? cause.message : "Planner failed"); }
+  };
+
+  const handleUseDefault = async () => {
+    setActionError(null);
+    try {
+      const created = await apiFetch<Agent>(`/api/v1/projects/${projectId}/agents`, {
+        method: "POST",
+        body: JSON.stringify({ name: "Default Gemini Agent", slug: `default-gemini-${projectId.replace(/-/g, "").slice(0, 12)}`, role: "DEVELOPER", model_provider: "default", model: (await fetchAgentModelDefaults()).model, system_prompt: "Work on assigned project tasks and write complete files for review." }),
+      });
+      setAgents((old) => [...old, created]);
+    } catch (cause) { setActionError(cause instanceof Error ? cause.message : "Could not add default agent"); }
+  };
 
   // Execute state machine transition respecting server-side validation & optimistic locking
   const handleTransition = async (task: Task, nextStatus: Task["status"]) => {
@@ -132,9 +193,13 @@ export default function ProjectKanbanPage() {
               ({tasks.length} total)
             </span>
           </h1>
+          <p className="text-xs text-muted-foreground">Assigned agents edit shared files live and create a Git checkpoint. Keep this tab open while an agent is working.</p>
         </div>
 
         <div className="flex items-center gap-3">
+          <Link href="/agents"><Button variant="outline" size="sm">Create agent</Button></Link>
+          {plannerAvailable && !agents.some((agent) => agent.model_provider === "default") && <Button variant="outline" size="sm" onClick={handleUseDefault}>Use default agent</Button>}
+          {tasks.length === 0 && <Button variant="outline" size="sm" onClick={handlePlan} disabled={!plannerAvailable}>Plan with default agent</Button>}
           <Button
             variant="outline"
             size="sm"
@@ -167,6 +232,8 @@ export default function ProjectKanbanPage() {
           </Button>
         </div>
       )}
+
+      {!plannerAvailable && <p className="rounded border border-amber-500/40 bg-amber-500/10 p-3 text-xs text-amber-600">The planner is unavailable until the developer sets DEFAULT_GEMINI_API_KEY. You can still create tasks manually.</p>}
 
       {/* Kanban Board Columns Container */}
       {isLoading ? (
@@ -241,11 +308,21 @@ export default function ProjectKanbanPage() {
                           </CardHeader>
 
                           <CardContent className="p-3.5 pt-0 space-y-2.5">
+                            {task.result?.stage && <p className="text-[11px] text-primary">{task.result.stage}{task.result.files?.length ? ` · ${task.result.files.join(", ")}` : ""}</p>}
+                            {task.result?.summary && <p className="text-[11px] text-muted-foreground">{task.result.summary}</p>}
+                            {task.error_message && <p className="text-[11px] text-destructive">{task.error_message}</p>}
+                            {(task.status === "TODO" || task.status === "CLAIMED" || task.status === "IN_PROGRESS") && <div className="space-y-1.5">
+                              <select aria-label={`Agent for ${task.title}`} className="w-full rounded border bg-background p-1.5 text-[11px]" value={selectedAgents[task.id] || task.assigned_agent_id || ""} disabled={task.status !== "TODO"} onChange={(event) => setSelectedAgents((old) => ({ ...old, [task.id]: event.target.value }))}>
+                                <option value="">Assign an agent</option>
+                                {agents.map((agent) => <option key={agent.id} value={agent.id}>{agent.name} · {agent.model_provider}</option>)}
+                              </select>
+                              <Button size="sm" className="w-full h-7 text-[11px]" disabled={runningTaskId === task.id || !plannerAvailable || !(selectedAgents[task.id] || task.assigned_agent_id)} onClick={() => handleAssignAndRun(task)}>{runningTaskId === task.id ? "Working in shared files…" : task.status === "TODO" ? "Assign and start" : "Resume agent work"}</Button>
+                            </div>}
                             {/* Worker Assignment & Dependencies */}
                             <div className="flex flex-wrap items-center gap-1.5 text-[10px] text-muted-foreground pt-1 border-t">
                               {task.assigned_agent_id ? (
                                 <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-primary/10 text-primary font-mono">
-                                  <span>agent</span>
+                                  <span>{agents.find((agent) => agent.id === task.assigned_agent_id)?.name || "agent"}</span>
                                 </span>
                               ) : task.assigned_user_id ? (
                                 <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-muted font-mono">

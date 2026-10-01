@@ -34,6 +34,9 @@ export interface Task {
   assigned_agent_id: string | null;
   assigned_user_id: string | null;
   version: number;
+  context?: Record<string, unknown>;
+  result?: { stage?: string; summary?: string; files?: string[]; [key: string]: unknown } | null;
+  error_message?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -102,6 +105,7 @@ export interface AgentModelDefaults {
   base_url: string;
   user_supplied_keys_enabled: boolean;
   free_tier_models: string[];
+  default_agent_available?: boolean;
 }
 
 export interface ProjectMember {

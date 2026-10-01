@@ -43,7 +43,7 @@ export default function AgentsPage() {
       const [agentData, projectData, modelDefaults] = await Promise.all([
         apiFetch<Agent[]>("/api/v1/agents").catch(() => [] as Agent[]),
         apiFetch<Project[]>("/api/v1/projects").catch(() => [] as Project[]),
-        fetchAgentModelDefaults(),
+        fetchAgentModelDefaults(true),
       ]);
       setAgents(agentData || []);
       setProjects(projectData || []);
@@ -123,7 +123,7 @@ export default function AgentsPage() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight text-foreground">Agents</h1>
           <p className="text-muted-foreground mt-1 text-sm">
-            Register agents with your own API key and assign them to projects and roles.
+            Choose the default Gemini agent or create an agent with your own provider key.
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -232,7 +232,7 @@ export default function AgentsPage() {
                     <div className="flex items-center justify-between gap-2">
                       <dt className="text-muted-foreground">Model</dt>
                       <dd className="font-mono truncate" title={agent.model}>
-                        {agent.model}
+                        {agent.model_provider === "default" ? defaults.model : agent.model}
                       </dd>
                     </div>
                     <div className="flex items-center justify-between gap-2">
@@ -249,11 +249,11 @@ export default function AgentsPage() {
                       <dt className="text-muted-foreground">API Key</dt>
                       <dd
                         className={`flex items-center gap-1.5 font-mono ${
-                          credential ? "text-emerald-400" : "text-amber-400"
+                          credential || agent.model_provider === "default" ? "text-emerald-400" : "text-amber-400"
                         }`}
                       >
                         <KeyRound className="w-3 h-3" />
-                        {credential ? maskApiKey(credential.apiKey) : "Not set"}
+                        {agent.model_provider === "default" ? "Developer configured" : credential ? maskApiKey(credential.apiKey) : "Not set"}
                       </dd>
                     </div>
                   </dl>
@@ -263,7 +263,7 @@ export default function AgentsPage() {
                       Created {new Date(agent.created_at).toLocaleDateString()}
                     </span>
                     <div className="flex items-center gap-1">
-                      {defaults.user_supplied_keys_enabled && agent.model_provider === "gemini" && (
+                      {(agent.model_provider === "default" ? defaults.default_agent_available : defaults.user_supplied_keys_enabled) && (
                         <Button variant="outline" size="sm" onClick={() => setRunningAgent(agent)} className="gap-1.5 text-xs h-8">
                           <span>Run</span>
                         </Button>

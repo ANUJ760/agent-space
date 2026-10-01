@@ -15,6 +15,7 @@ import {
 } from "@/lib/agent-credentials";
 import { AGENT_ROLES } from "@/lib/agent-model-defaults";
 import { GEMINI_DEFAULT_BASE_URL, verifyApiKey } from "@/lib/gemini-client";
+import { PROVIDER_MODELS, PROVIDER_URLS } from "@/lib/agent-provider";
 import type { Agent, AgentModelDefaults, Project } from "@/types/api";
 
 const INPUT_CLASS =
@@ -60,10 +61,12 @@ export function AgentDialog({
   const [description, setDescription] = useState("");
   const [role, setRole] = useState<string>(AGENT_ROLES[0]);
   const [model, setModel] = useState(defaults.model);
+  const [provider, setProvider] = useState<AgentProvider | "default">("default");
   const [projectId, setProjectId] = useState<string>("");
   const [systemPrompt, setSystemPrompt] = useState("");
   const [capabilities, setCapabilities] = useState("");
   const [apiKey, setApiKey] = useState("");
+  const [baseUrl, setBaseUrl] = useState("");
   const [storedKeyMask, setStoredKeyMask] = useState<string | null>(null);
   const [removeStoredKey, setRemoveStoredKey] = useState(false);
   const [showKey, setShowKey] = useState(false);
@@ -83,11 +86,13 @@ export function AgentDialog({
     setSlugTouched(Boolean(agent));
     setDescription(agent?.description ?? "");
     setRole(agent?.role ?? AGENT_ROLES[0]);
-    setModel(agent?.model_provider === "gemini" ? agent.model : defaults.model);
+    setProvider(agent?.model_provider === "openai" || agent?.model_provider === "anthropic" || agent?.model_provider === "gemini" || agent?.model_provider === "openai-compatible" ? agent.model_provider : defaults.default_agent_available ? "default" : "gemini");
+    setModel(agent?.model_provider === "default" ? defaults.model : agent?.model ?? defaults.model);
     setProjectId(agent?.project_id ?? presetProjectId ?? "");
     setSystemPrompt(agent?.system_prompt ?? "");
     setCapabilities((agent?.capabilities ?? []).join(", "));
     setApiKey("");
+    setBaseUrl(stored?.baseUrl || "");
     setStoredKeyMask(stored ? maskApiKey(stored.apiKey) : null);
     setRemoveStoredKey(false);
     setShowKey(false);
@@ -96,10 +101,10 @@ export function AgentDialog({
   }, [isOpen, agent, defaults.model, presetProjectId]);
 
   const modelOptions = useMemo(() => {
-    const options = [...defaults.free_tier_models];
+    const options = provider === "default" ? [defaults.model] : PROVIDER_MODELS[provider];
     if (model && !options.includes(model)) options.unshift(model);
     return options;
-  }, [defaults.free_tier_models, model]);
+  }, [defaults.model, model, provider]);
 
   const roleOptions = useMemo(() => {
     const options: string[] = [...AGENT_ROLES];
@@ -127,6 +132,7 @@ export function AgentDialog({
       setVerify({ status: "error", message: "Enter an API key to verify." });
       return;
     }
+    if (provider !== "gemini") return;
     setVerify({ status: "checking" });
     const result = await verifyApiKey(apiKey, defaults.base_url || GEMINI_DEFAULT_BASE_URL);
     setVerify(
@@ -150,7 +156,20 @@ export function AgentDialog({
       setError("Agent name and slug are required.");
       return;
     }
-    if (!isEditing && keysEnabled && !apiKey.trim()) {
+    if (!model.trim()) { setError("Enter a model ID for this provider."); return; }
+    if (provider === "default" && !defaults.default_agent_available) {
+      setError("Default agent is unavailable. Ask the developer to set DEFAULT_GEMINI_API_KEY, or select your own provider.");
+      return;
+    }
+    if (provider === "openai-compatible" && !/^https:\/\//.test(baseUrl) && !/^http:\/\/localhost(?::\d+)?\//.test(baseUrl)) {
+      setError("Enter an HTTPS API base URL for this provider.");
+      return;
+    }
+    if (provider !== "default" && !keysEnabled) {
+      setError("Personal API keys are disabled by the administrator.");
+      return;
+    }
+    if (provider !== "default" && (!isEditing || agent?.model_provider !== provider || removeStoredKey) && !apiKey.trim()) {
       setError("An API key is required so the agent can run from your browser.");
       return;
     }
@@ -162,14 +181,13 @@ export function AgentDialog({
     setIsSubmitting(true);
     setError(null);
 
-    const provider: AgentProvider = "gemini";
     const capabilitiesList = capabilities
       .split(",")
       .map((entry) => entry.trim())
       .filter(Boolean);
 
     try {
-      if (apiKey.trim()) ensureCredentialStorageAvailable();
+      if (provider !== "default" && apiKey.trim()) ensureCredentialStorageAvailable();
       let saved: Agent;
       let created = false;
 
@@ -180,7 +198,7 @@ export function AgentDialog({
             name: name.trim(),
             description: description.trim(),
             role,
-            model: model.trim(),
+            model: provider === "default" ? defaults.model : model.trim(),
             model_provider: provider,
             capabilities: capabilitiesList,
             system_prompt: systemPrompt.trim(),
@@ -195,7 +213,7 @@ export function AgentDialog({
             slug: slug.trim(),
             description: description.trim(),
             role,
-            model: model.trim(),
+            model: provider === "default" ? defaults.model : model.trim(),
             model_provider: provider,
             capabilities: capabilitiesList,
             system_prompt: systemPrompt.trim(),
@@ -206,15 +224,16 @@ export function AgentDialog({
       }
 
       // The key is written to the browser vault only, never to the backend.
-      if (removeStoredKey) removeCredential(saved.id);
-      if (apiKey.trim()) {
+      if (removeStoredKey || (agent && agent.model_provider !== provider)) removeCredential(saved.id);
+      if (provider !== "default" && apiKey.trim()) {
         saveCredential({
           agentId: saved.id,
           provider,
           apiKey,
-          baseUrl: defaults.base_url || GEMINI_DEFAULT_BASE_URL,
+          baseUrl: provider === "openai-compatible" ? baseUrl : PROVIDER_URLS[provider],
         });
       }
+      if (provider === "default") removeCredential(saved.id);
 
       onSaved(saved, created);
       onClose();
@@ -258,7 +277,7 @@ export function AgentDialog({
               <p className="text-xs text-muted-foreground">
                 {isEditing
                   ? "Update model, role, project assignment, or your API key"
-                  : "Bring your own Gemini API key and assign the agent to a project and role"}
+                  : "Use the default agent or create one with your own provider key"}
               </p>
             </div>
           </div>
@@ -373,18 +392,21 @@ export function AgentDialog({
               <label className={LABEL_CLASS} htmlFor="agent-provider">
                 Provider
               </label>
-              <div className="flex items-center gap-2">
-                <input
-                  id="agent-provider"
-                  type="text"
-                  value={defaults.provider}
-                  readOnly
-                  className={`${INPUT_CLASS} font-mono bg-muted/40`}
-                />
-                <Badge variant="outline" className="shrink-0 font-mono">
-                  BYOK
-                </Badge>
-              </div>
+              <select id="agent-provider" value={provider} onChange={(e) => {
+                const next = e.target.value as AgentProvider | "default";
+                setProvider(next);
+                setModel(next === "default" ? defaults.model : PROVIDER_MODELS[next][0] || "");
+                setApiKey("");
+                setBaseUrl(next === "openai-compatible" ? (agent && agent.model_provider === next ? getCredential(agent.id)?.baseUrl || "" : "") : PROVIDER_URLS[next as AgentProvider] || "");
+                setStoredKeyMask(next === agent?.model_provider ? (agent ? (getCredential(agent.id) ? maskApiKey(getCredential(agent.id)!.apiKey) : null) : null) : null);
+                setVerify({ status: "idle" });
+              }} className={INPUT_CLASS}>
+                <option value="default">Default Gemini agent {defaults.default_agent_available ? "" : "(not configured)"}</option>
+                <option value="gemini">My Gemini key</option>
+                <option value="openai">My OpenAI key</option>
+                <option value="anthropic">My Anthropic key</option>
+                <option value="openai-compatible">Other OpenAI-compatible API</option>
+              </select>
             </div>
 
             <div className="space-y-1.5">
@@ -397,6 +419,8 @@ export function AgentDialog({
                 list={modelListId}
                 value={model}
                 onChange={(e) => setModel(e.target.value)}
+                disabled={provider === "default"}
+                required
                 className={`${INPUT_CLASS} font-mono`}
               />
               <datalist id={modelListId}>
@@ -407,18 +431,22 @@ export function AgentDialog({
             </div>
           </div>
 
+          {provider === "openai-compatible" && <div className="space-y-1.5"><label className={LABEL_CLASS} htmlFor="agent-base-url">API base URL</label><input id="agent-base-url" type="url" value={baseUrl} onChange={(event) => setBaseUrl(event.target.value)} placeholder="https://provider.example/v1" className={INPUT_CLASS} required /><p className="text-[11px] text-muted-foreground">The browser sends your key directly to this endpoint. It must allow browser requests.</p></div>}
+
+          {provider === "default" && <p className="rounded-md border bg-muted/20 p-3 text-xs text-muted-foreground">The default agent uses {defaults.model} with the developer&apos;s Gemini key. No personal API key is needed.</p>}
+
           {/* Bring-your-own-key: the secret lives in this browser only. */}
-          <div className="rounded-md border border-border/70 bg-muted/20 p-4 space-y-3">
+          {provider !== "default" && <div className="rounded-md border border-border/70 bg-muted/20 p-4 space-y-3">
             <div className="flex items-start gap-2">
               <KeyRound className="w-4 h-4 text-primary mt-0.5 shrink-0" />
               <div className="flex-1">
                 <p className="text-xs font-semibold text-foreground">
                   <label htmlFor="agent-api-key">
-                    Your Gemini API Key {!isEditing && <span className="text-destructive">*</span>}
+                    Your {provider} API Key {!isEditing && <span className="text-destructive">*</span>}
                   </label>
                 </p>
                 <p className="text-[11px] text-muted-foreground mt-0.5">
-                  Stored in this browser only and used to call Gemini directly. It is never sent
+                  Stored in this browser only and used to call {provider} directly. It is never sent
                   to or stored by the Agent Space server.
                 </p>
               </div>
@@ -460,7 +488,7 @@ export function AgentDialog({
                         setApiKey(e.target.value);
                         setVerify({ status: "idle" });
                       }}
-                      placeholder={storedKeyMask ? "Enter a new key to replace" : "AIza..."}
+                      placeholder={storedKeyMask ? "Enter a new key to replace" : "Paste your provider API key"}
                       autoComplete="off"
                       spellCheck={false}
                       className={`${INPUT_CLASS} font-mono pr-10`}
@@ -474,7 +502,7 @@ export function AgentDialog({
                       {showKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                     </button>
                   </div>
-                  <Button
+                  {provider === "gemini" && <Button
                     type="button"
                     variant="outline"
                     size="sm"
@@ -488,8 +516,10 @@ export function AgentDialog({
                       <ShieldCheck className="w-3.5 h-3.5" />
                     )}
                     <span>Verify</span>
-                  </Button>
+                  </Button>}
                 </div>
+
+                {provider !== "gemini" && <p className="text-[11px] text-muted-foreground">This key is checked by the provider on the first run.</p>}
 
                 {verify.status === "ok" && (
                   <p className="text-[11px] text-emerald-400">{verify.message}</p>
@@ -499,7 +529,7 @@ export function AgentDialog({
                 )}
               </>
             )}
-          </div>
+          </div>}
 
           <div className="space-y-1.5">
             <label className={LABEL_CLASS} htmlFor="agent-capabilities">

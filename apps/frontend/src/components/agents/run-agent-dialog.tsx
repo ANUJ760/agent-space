@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { Loader2, Play, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { getCredential } from "@/lib/agent-credentials";
-import { generateContent } from "@/lib/gemini-client";
+import { generateAgentText } from "@/lib/agent-provider";
 import { apiFetch } from "@/lib/api-client";
 import { applyWorkspaceFile } from "@/lib/workspace-collab";
 import type { Agent, Project } from "@/types/api";
@@ -34,13 +34,13 @@ export function RunAgentDialog({ agent, project, initialPrompt = "", onClose }: 
   if (!agent) return null;
 
   const run = async () => {
-    const credential = getCredential(agent.id);
-    if (!credential) {
-      setError("Add a Gemini API key for this agent on this browser first.");
+    const credential = agent.model_provider === "default" ? null : getCredential(agent.id);
+    if (agent.model_provider !== "default" && !credential) {
+      setError(`Add a ${agent.model_provider} API key for this agent on this browser first.`);
       return;
     }
-    if (agent.model_provider !== "gemini" || credential.provider !== "gemini") {
-      setError("Browser runs currently support Gemini agents only.");
+    if (credential && credential.provider !== agent.model_provider) {
+      setError("The saved key belongs to a different provider. Reattach the key in Edit Agent.");
       return;
     }
     setRunning(true);
@@ -63,15 +63,9 @@ export function RunAgentDialog({ agent, project, initialPrompt = "", onClose }: 
         }
         context += '\nReturn JSON only: {"summary":"what changed","files":[{"path":"relative/path","content":"complete new UTF-8 file content"}]}. Include only files you want to create or change. Do not return shell commands.\n';
       }
-      const result = await generateContent({
-        apiKey: credential.apiKey,
-        baseUrl: credential.baseUrl,
-        model: agent.model,
-        systemPrompt: agent.system_prompt,
-        prompt: `${context}\nRequest: ${prompt.trim()}`,
-        maxTokens: 16384,
-      });
-      const raw = result.text || "Gemini returned no text. Try a different prompt.";
+      const raw = agent.model_provider === "default"
+        ? (await apiFetch<{ text: string }>("/api/v1/agents/default/generate", { method: "POST", body: JSON.stringify({ prompt: `${context}\nRequest: ${prompt.trim()}`, system_prompt: agent.system_prompt, max_tokens: 16384 }) })).text
+        : await generateAgentText({ provider: credential!.provider, apiKey: credential!.apiKey, baseUrl: credential!.baseUrl, model: agent.model, systemPrompt: agent.system_prompt, prompt: `${context}\nRequest: ${prompt.trim()}`, maxTokens: 16384 });
       if (project) {
         try {
           const parsed = JSON.parse(raw.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "")) as { summary?: string; files?: Array<{ path: string; content: string }> };
@@ -113,7 +107,7 @@ export function RunAgentDialog({ agent, project, initialPrompt = "", onClose }: 
         <div className="flex items-start justify-between gap-3">
           <div>
             <h2 className="text-lg font-semibold">Run {agent.name}</h2>
-            <p className="text-xs text-muted-foreground">{agent.model} · Runs in this browser with your API key. {project ? "Workspace file contents are sent to Gemini for this run. Review edits before applying." : "Keep this page open until it finishes."}</p>
+            <p className="text-xs text-muted-foreground">{agent.model_provider === "default" ? "Configured Gemini model" : agent.model} · {agent.model_provider === "default" ? "Uses the configured default Gemini agent." : "Runs in this browser with your API key."} {project ? `Workspace contents are sent to ${agent.model_provider === "default" ? "Gemini" : agent.model_provider}. Review edits before applying.` : "Keep this page open until it finishes."}</p>
           </div>
           <Button variant="ghost" size="icon" onClick={onClose} aria-label="Close run dialog"><X className="w-4 h-4" /></Button>
         </div>
@@ -124,7 +118,7 @@ export function RunAgentDialog({ agent, project, initialPrompt = "", onClose }: 
         {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
         <Button onClick={run} disabled={running || !prompt.trim()} className="gap-2">
           {running ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
-          {running ? "Running..." : "Run in browser"}
+          {running ? "Running..." : "Run agent"}
         </Button>
         {output && (
           <div className="space-y-2 border-t pt-4">
@@ -132,7 +126,7 @@ export function RunAgentDialog({ agent, project, initialPrompt = "", onClose }: 
               <h3 className="text-sm font-semibold">Result</h3>
               <Button variant="outline" size="sm" onClick={() => navigator.clipboard.writeText(output)}>Copy</Button>
             </div>
-            <pre className="whitespace-pre-wrap break-words rounded-md bg-muted/40 p-4 text-sm font-sans">{output}</pre>
+            <pre className="max-h-96 overflow-auto whitespace-pre-wrap break-words rounded-md bg-muted/40 p-4 text-sm font-mono">{output}</pre>
             {proposedFiles.length > 0 && <div className="space-y-2"><p className="text-xs text-muted-foreground">Review these proposed files before applying. Other collaborators will see the edits immediately.</p>{proposedFiles.map((file) => <details key={file.path} className="border p-2 text-xs"><summary className="cursor-pointer font-mono">{file.path}</summary><pre className="max-h-48 overflow-auto whitespace-pre-wrap break-all p-2">{file.content}</pre></details>)}<Button onClick={applyChanges} disabled={applying}>{applying ? "Applying..." : `Apply ${proposedFiles.length} file changes`}</Button></div>}
           </div>
         )}

@@ -37,7 +37,6 @@ import {
   Plus,
 } from "lucide-react";
 import { AgentDialog } from "@/components/agents/agent-dialog";
-import { RunAgentDialog } from "@/components/agents/run-agent-dialog";
 import { apiFetch } from "@/lib/api-client";
 import { hasCredential } from "@/lib/agent-credentials";
 import {
@@ -78,7 +77,6 @@ export default function ProjectWorkspacePage() {
   // Agent onboarding: the user attaches their own provider key and picks a role.
   const [agentDialogOpen, setAgentDialogOpen] = useState(false);
   const [editingAgent, setEditingAgent] = useState<Agent | null>(null);
-  const [runningAgent, setRunningAgent] = useState<Agent | null>(null);
   const [modelDefaults, setModelDefaults] = useState<AgentModelDefaults>(
     FALLBACK_AGENT_MODEL_DEFAULTS
   );
@@ -97,7 +95,7 @@ export default function ProjectWorkspacePage() {
           apiFetch<Agent[]>(`/api/v1/projects/${projectId}/agents`).catch(() => []),
           apiFetch<Task[]>(`/api/v1/projects/${projectId}/tasks`).catch(() => []),
           apiFetch<AuditEvent[]>(`/api/v1/projects/${projectId}/audit-events`).catch(() => []),
-          fetchAgentModelDefaults(),
+          fetchAgentModelDefaults(true),
         ]);
 
       setProject(projData);
@@ -116,6 +114,21 @@ export default function ProjectWorkspacePage() {
   useEffect(() => {
     fetchProjectDetails();
   }, [fetchProjectDetails]);
+
+  useEffect(() => {
+    if (!projectId) return;
+    const timer = window.setInterval(async () => {
+      try {
+        const [latestTasks, latestEvents] = await Promise.all([
+          apiFetch<Task[]>(`/api/v1/projects/${projectId}/tasks`),
+          apiFetch<AuditEvent[]>(`/api/v1/projects/${projectId}/audit-events`),
+        ]);
+        setTasks(latestTasks);
+        setAuditEvents(latestEvents);
+      } catch { /* Keep showing the last known project state. */ }
+    }, 3000);
+    return () => window.clearInterval(timer);
+  }, [projectId]);
 
   const hasAgentKey = useMemo(() => {
     const map: Record<string, boolean> = {};
@@ -246,7 +259,7 @@ export default function ProjectWorkspacePage() {
               </div>
               <div>
                 <div className="text-[10px] text-muted-foreground uppercase font-mono">Agents</div>
-                <div className="text-xs font-bold font-mono text-violet-400">{agents.length}</div>
+                <div className="text-xs font-bold font-mono text-violet-400">{agents.length + (modelDefaults.default_agent_available ? 1 : 0)}</div>
               </div>
             </div>
 
@@ -287,7 +300,7 @@ export default function ProjectWorkspacePage() {
           <div className="w-5 h-5 rounded-full border border-border/80 flex items-center justify-center">
             <Users className="w-2.5 h-2.5" />
           </div>
-          <span>1. Collaborators ({members.length + agents.length})</span>
+          <span>1. Collaborators ({members.length + agents.length + (modelDefaults.default_agent_available ? 1 : 0)})</span>
         </button>
 
         {/* Tab 2: Middle Tab — Ongoing Progress with Color-Coded Markers */}
@@ -399,7 +412,7 @@ export default function ProjectWorkspacePage() {
                 </div>
                 <div className="flex items-center gap-2">
                   <Badge variant="outline" className="border-violet-500/40 text-violet-400 font-mono text-[10px]">
-                    {agents.length} Standby / Active
+                    {agents.length + (modelDefaults.default_agent_available ? 1 : 0)} Standby / Active
                   </Badge>
                   <Button
                     variant="outline"
@@ -413,9 +426,10 @@ export default function ProjectWorkspacePage() {
                 </div>
               </CardHeader>
               <CardContent className="space-y-2.5">
+                {modelDefaults.default_agent_available && <div className="p-3 border border-violet-500/30 bg-violet-500/5 text-xs"><div className="font-semibold text-violet-300">Project Planner · {modelDefaults.model}</div><p className="text-muted-foreground mt-1">Breaks the brief into tasks and coordinates file assignments when a task starts.</p></div>}
                 {agents.length === 0 ? (
                   <div className="p-6 text-center text-xs text-muted-foreground border border-dashed border-border/60 space-y-3">
-                    <p>No autonomous agents assigned to this project yet.</p>
+                    <p>No worker agents assigned to this project yet.</p>
                     <Button
                       variant="outline"
                       size="sm"
@@ -442,20 +456,20 @@ export default function ProjectWorkspacePage() {
                             <span className="w-1.5 h-1.5 rounded-full bg-violet-400" title="Autonomous Agent" />
                           </div>
                           <div className="text-[10px] text-muted-foreground font-mono">
-                            model: <span className="text-foreground">{ag.model || modelDefaults.model}</span>
+                            model: <span className="text-foreground">{ag.model_provider === "default" ? modelDefaults.model : ag.model}</span>
                           </div>
                         </div>
                       </div>
 
                       <div className="flex items-center gap-2">
                         <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => { setEditingAgent(ag); setAgentDialogOpen(true); }}>Edit</Button>
-                        {modelDefaults.user_supplied_keys_enabled && ag.model_provider === "gemini" && <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => setRunningAgent(ag)}>Run</Button>}
+                        {(ag.model_provider === "default" ? modelDefaults.default_agent_available : modelDefaults.user_supplied_keys_enabled) && <Link href={`/projects/${project.id}/tasks`}><Button variant="outline" size="sm" className="h-7 text-xs">Assign task</Button></Link>}
                         <Badge
                           variant="outline"
                           title={
                             hasAgentKey[ag.id]
                               ? "API key stored in this browser"
-                              : "No API key stored in this browser"
+                              : ag.model_provider === "default" ? "Developer configured Gemini" : "No API key stored in this browser"
                           }
                           className={`text-[9px] font-mono gap-1 ${
                             hasAgentKey[ag.id]
@@ -464,7 +478,7 @@ export default function ProjectWorkspacePage() {
                           }`}
                         >
                           <KeyRound className="w-2.5 h-2.5" />
-                          {hasAgentKey[ag.id] ? "KEY SET" : "NO KEY"}
+                          {ag.model_provider === "default" ? "DEFAULT" : hasAgentKey[ag.id] ? "KEY SET" : "NO KEY"}
                         </Badge>
                         <Badge
                           variant="outline"
@@ -547,13 +561,14 @@ export default function ProjectWorkspacePage() {
 
                 {tasks.length === 0 ? (
                   <div className="p-8 text-center text-xs text-muted-foreground border border-dashed border-border/60">
-                    No active tasks or milestones initialized. Create a task in the Workspace tab to populate the progress pipeline.
+                    No tasks yet. Open the task board to generate a plan with the default agent or create a task manually.
                   </div>
                 ) : (
                   <div className="relative border-l-2 border-border/60 ml-4 pl-6 space-y-6">
                     {tasks.map((task, idx) => {
                       // Determine if task assigned to human or agent
                       const isAssignedToAgent = Boolean(task.assigned_agent_id);
+                      const isAssignedToHuman = Boolean(task.assigned_user_id);
                       const isCompleted = task.status === "DONE";
                       const isInProgress = task.status === "IN_PROGRESS" || task.status === "REVIEW";
 
@@ -564,14 +579,16 @@ export default function ProjectWorkspacePage() {
                             className={`absolute -left-[35px] top-1.5 w-6 h-6 rounded-full border-2 flex items-center justify-center text-[10px] font-bold shadow-md transition-transform group-hover:scale-110 ${
                               isAssignedToAgent
                                 ? "border-violet-400 bg-violet-950 text-violet-300 ring-2 ring-violet-500/20"
-                                : "border-cyan-400 bg-cyan-950 text-cyan-300 ring-2 ring-cyan-500/20"
+                                : isAssignedToHuman ? "border-cyan-400 bg-cyan-950 text-cyan-300 ring-2 ring-cyan-500/20" : "border-border bg-muted text-muted-foreground"
                             }`}
-                            title={isAssignedToAgent ? "Autonomous Agent Execution" : "Human Engineer Execution"}
+                            title={isAssignedToAgent ? "Autonomous Agent Execution" : isAssignedToHuman ? "Human Engineer Execution" : "Unassigned task"}
                           >
                             {isAssignedToAgent ? (
                               <Bot className="w-3 h-3 text-violet-300" />
-                            ) : (
+                            ) : isAssignedToHuman ? (
                               <UserCheck className="w-3 h-3 text-cyan-300" />
+                            ) : (
+                              <CheckSquare className="w-3 h-3" />
                             )}
                           </div>
 
@@ -601,6 +618,7 @@ export default function ProjectWorkspacePage() {
                                     {task.description}
                                   </p>
                                 )}
+                                {task.result?.stage && <p className="text-[11px] text-primary">{task.result.stage}{task.result.files?.length ? ` · ${task.result.files.join(", ")}` : ""}</p>}
                               </div>
 
                               {/* Actor Marker Badge */}
@@ -610,11 +628,13 @@ export default function ProjectWorkspacePage() {
                                     <span className="w-1.5 h-1.5 rounded-full bg-violet-400" />
                                     <span>Agent Worker</span>
                                   </div>
-                                ) : (
+                                ) : task.assigned_user_id ? (
                                   <div className="flex items-center gap-1.5 px-2 py-0.5 border border-cyan-500/30 bg-cyan-500/10 text-cyan-300 rounded-none text-[10px] font-mono font-medium">
                                     <span className="w-1.5 h-1.5 rounded-full bg-cyan-400" />
                                     <span>Human Dev</span>
                                   </div>
+                                ) : (
+                                  <div className="px-2 py-0.5 border border-border text-muted-foreground text-[10px] font-mono">Unassigned</div>
                                 )}
                                 <span className="text-[10px] text-muted-foreground font-mono">
                                   Pri: {task.priority}
@@ -749,7 +769,6 @@ export default function ProjectWorkspacePage() {
           setCredentialVersion((v) => v + 1);
         }}
       />
-      <RunAgentDialog agent={runningAgent} project={project} onClose={() => setRunningAgent(null)} />
     </div>
   );
 }

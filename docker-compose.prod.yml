@@ -16,6 +16,8 @@ services:
       - CORS_ORIGINS=${PUBLIC_WEB_URL:?Set PUBLIC_WEB_URL for production}
       - DATABASE_URL=postgresql+asyncpg://agentspace:${DB_PASSWORD:?Set DB_PASSWORD for production}@postgres:5432/agentspace
       - REDIS_URL=redis://redis:6379/0
+      - DEFAULT_GEMINI_API_KEY=${DEFAULT_GEMINI_API_KEY:-}
+      - DEFAULT_AGENT_MODEL=${DEFAULT_AGENT_MODEL:-gemini-2.5-flash}
       - NATS_URL=nats://nats:4222
       - TEMPORAL_HOST=temporal:7233
       - KEYCLOAK_SERVER_URL=http://keycloak:8080

@@ -99,6 +99,7 @@ class AgentModelDefaultsResponse(BaseModel):
         description="Whether the UI should let users attach their own API key"
     )
     free_tier_models: list[str] = Field(description="Models selectable without a paid plan")
+    default_agent_available: bool = False
 
 
 class AgentResponse(BaseModel):
