@@ -26,9 +26,11 @@ from typing import Any
 
 import structlog
 from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect, status
+from sqlalchemy import select
 
 from app.auth.oidc import get_oidc_client
 from app.database import get_db_manager
+from app.models.task import Task
 from app.repositories.project_member_repo import ProjectMemberRepository
 from app.repositories.project_repo import ProjectRepository
 from app.services.user_service import reconcile_user
@@ -38,6 +40,8 @@ logger = structlog.stdlib.get_logger(__name__)
 router = APIRouter()
 
 SUPPORTED_EVENT_TYPES = {
+    "task.snapshot",
+    "task.deleted",
     "task.updated",
     "task.assigned",
     "task.released",
@@ -46,6 +50,64 @@ SUPPORTED_EVENT_TYPES = {
     "workflow.updated",
     "human.input_required",
 }
+
+
+async def _stream_task_snapshots(websocket: WebSocket, project_id: uuid.UUID) -> None:
+    """Stream authoritative task changes regardless of which worker changed them."""
+    versions: dict[uuid.UUID, tuple[int, str]] = {}
+    db_mgr = get_db_manager()
+    while True:
+        async with db_mgr.session_factory() as session:
+            tasks = list(
+                (
+                    await session.scalars(
+                        select(Task)
+                        .where(Task.project_id == project_id)
+                        .order_by(Task.created_at.asc())
+                    )
+                ).all()
+            )
+        current_ids = {task.id for task in tasks}
+        for task in tasks:
+            marker = (task.version, task.updated_at.isoformat())
+            if versions.get(task.id) == marker:
+                continue
+            versions[task.id] = marker
+            await websocket.send_json(
+                {
+                    "event": "task.snapshot",
+                    "project_id": str(project_id),
+                    "payload": {
+                        "id": str(task.id),
+                        "project_id": str(task.project_id),
+                        "organization_id": str(task.organization_id),
+                        "title": task.title,
+                        "description": task.description,
+                        "status": task.status,
+                        "priority": task.priority,
+                        "assigned_agent_id": str(task.assigned_agent_id) if task.assigned_agent_id else None,
+                        "assigned_user_id": str(task.assigned_user_id) if task.assigned_user_id else None,
+                        "version": task.version,
+                        "context": task.context,
+                        "result": task.result,
+                        "error_message": task.error_message,
+                        "created_at": task.created_at.isoformat(),
+                        "updated_at": task.updated_at.isoformat(),
+                    },
+                    "timestamp": datetime.now(UTC).isoformat(),
+                }
+            )
+        for removed_id in set(versions) - current_ids:
+            del versions[removed_id]
+            await websocket.send_json(
+                {
+                    "event": "task.deleted",
+                    "project_id": str(project_id),
+                    "payload": {"id": str(removed_id)},
+                    "timestamp": datetime.now(UTC).isoformat(),
+                }
+            )
+        await asyncio.sleep(1)
 
 
 class ConnectionManager:
@@ -196,6 +258,7 @@ async def project_websocket_endpoint(
     )
 
     # 6. Listen for incoming client messages (heartbeat/ping)
+    stream_task = asyncio.create_task(_stream_task_snapshots(websocket, project_id))
     try:
         while True:
             data = await websocket.receive_json()
@@ -206,3 +269,6 @@ async def project_websocket_endpoint(
     except Exception as exc:
         logger.debug("websocket_exception_closed", error=str(exc))
         manager.disconnect(project_id, websocket)
+    finally:
+        stream_task.cancel()
+        await asyncio.gather(stream_task, return_exceptions=True)

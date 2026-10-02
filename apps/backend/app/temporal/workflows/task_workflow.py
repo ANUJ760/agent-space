@@ -203,9 +203,10 @@ class TaskWorkflow:
         if require_approval:
             self._state["status"] = "WAITING_FOR_APPROVAL"
             await workflow.wait_condition(lambda: self._approval is not None)
-            if not self._approval.get("approved"):
+            approval = self._approval or {}
+            if not approval.get("approved"):
                 self._state["status"] = "REJECTED"
-                self._state["error"] = f"Rejected: {self._approval.get('reason')}"
+                self._state["error"] = f"Rejected: {approval.get('reason')}"
                 return self._state
 
         await check_pause()

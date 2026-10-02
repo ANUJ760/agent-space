@@ -139,7 +139,7 @@ Users can choose a shared default Gemini agent or create a Gemini, OpenAI, Anthr
 | `GEMINI_API_BASE_URL` | string | `https://generativelanguage.googleapis.com/v1beta` | No | Gemini endpoint used by the backend default agent and browser Gemini agents. |
 | `USER_SUPPLIED_API_KEYS_ENABLED` | boolean | `true` | No | Set `false` to hide the browser key field and browser-run action. |
 
-The project planner creates tasks from the project brief when a default key is configured. Shared default inference is limited to 60 requests per organization and 20 per user per hour. Assigning a task to an agent starts work in the current browser tab: the planner selects files, the assigned provider generates edits, and Yjs applies them to the live workspace. A Git checkpoint is created, then the task enters review. Keep the task page open during execution. Provider keys are scoped to the signed-in user in browser storage and must be attached again on another device.
+The project planner creates tasks from the project brief when a default key is configured. Shared default inference is limited to 60 requests per organization and 20 per user per hour. User-key agents run in the current browser tab: the planner selects files, the assigned provider generates edits, and Yjs applies them to the live workspace. Default Gemini assignments are dispatched through NATS JetStream and run durably in Temporal, so the browser can close. Both paths create a Git checkpoint and move the task to review. Provider keys are scoped to the signed-in user in browser storage and must be attached again on another device.
 
 ## 10c. Collaborative project workspaces
 

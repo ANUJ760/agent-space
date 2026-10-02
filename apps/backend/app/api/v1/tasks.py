@@ -17,6 +17,7 @@ from app.errors import ConflictError, NotFoundError
 from app.models.task import Task
 from app.repositories.agent_repo import AgentRepository
 from app.repositories.outbox_repo import OutboxRepository
+from app.repositories.project_member_repo import ProjectMemberRepository
 from app.repositories.project_repo import ProjectRepository
 from app.repositories.task_dependency_repo import TaskDependencyRepository
 from app.repositories.task_repo import TaskRepository
@@ -392,6 +393,13 @@ async def assign_task(
         user = await user_repo.get_by_id(payload.assignee_id)
         if user is None or user.organization_id != task.organization_id:
             raise NotFoundError(resource="User", resource_id=str(payload.assignee_id))
+        member_repo = ProjectMemberRepository(session)
+        if await member_repo.get_by_project_and_user(task.project_id, payload.assignee_id) is None:
+            raise ConflictError(
+                code="USER_NOT_PROJECT_MEMBER",
+                message="Add this user to the project before assigning work.",
+                details={"user_id": str(payload.assignee_id), "project_id": str(task.project_id)},
+            )
 
     # Auto-claim task if in TODO
     if task.status == TaskStatus.TODO.value:
@@ -452,9 +460,11 @@ async def release_task(
     task.assigned_agent_id = None
     task.assigned_user_id = None
 
-    if task.status == TaskStatus.CLAIMED.value:
+    if task.status not in {TaskStatus.DONE.value, TaskStatus.CANCELLED.value}:
         task.status = TaskStatus.TODO.value
 
+    task.result = {"stage": "Released to backlog"}
+    task.error_message = None
     task.version += 1
     updated = await task_repo.update(task)
 
@@ -658,7 +668,7 @@ async def human_handoff(
 
     agent_repo = AgentRepository(session)
     agent = await agent_repo.get_by_id(payload.agent_id)
-    if not agent:
+    if not agent or agent.organization_id != task.organization_id:
         raise NotFoundError(resource="Agent", resource_id=str(payload.agent_id))
 
     updated = await task_repo.handoff_task_atomic(

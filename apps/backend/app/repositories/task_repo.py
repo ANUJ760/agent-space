@@ -77,8 +77,9 @@ class TaskRepository(BaseRepository[Task]):
         if allow_takeover:
             task.assigned_agent_id = assigned_agent
             task.assigned_user_id = assigned_user
-            if task.status == "TODO":
-                task.status = "CLAIMED"
+            task.status = "CLAIMED"
+            task.error_message = None
+            task.result = {"stage": "Reassigned; waiting to start"}
             task.version += 1
             return await self.update(task)
 
@@ -162,7 +163,7 @@ class TaskRepository(BaseRepository[Task]):
         task = await self.get_by_id_for_update(task_id)
         if not task:
             from app.errors import NotFoundError
-            raise NotFoundError(code="TASK_NOT_FOUND", message=f"Task {task_id} not found")
+            raise NotFoundError(resource="Task", resource_id=str(task_id))
 
         if expected_version is not None and task.version != expected_version:
             raise ConflictError(
@@ -197,7 +198,7 @@ class TaskRepository(BaseRepository[Task]):
         task = await self.get_by_id_for_update(task_id)
         if not task:
             from app.errors import NotFoundError
-            raise NotFoundError(code="TASK_NOT_FOUND", message=f"Task {task_id} not found")
+            raise NotFoundError(resource="Task", resource_id=str(task_id))
 
         if task.assigned_user_id != user_id:
             raise ConflictError(
@@ -217,4 +218,3 @@ class TaskRepository(BaseRepository[Task]):
         await self._session.flush()
         await self._session.refresh(task)
         return task
-

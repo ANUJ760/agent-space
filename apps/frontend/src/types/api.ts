@@ -35,7 +35,7 @@ export interface Task {
   assigned_user_id: string | null;
   version: number;
   context?: Record<string, unknown>;
-  result?: { stage?: string; summary?: string; files?: string[]; [key: string]: unknown } | null;
+  result?: { stage?: string; summary?: string; files?: string[]; changes?: Array<{ path: string; additions: number; deletions: number }>; [key: string]: unknown } | null;
   error_message?: string | null;
   created_at: string;
   updated_at: string;

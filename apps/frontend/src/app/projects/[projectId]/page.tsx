@@ -39,6 +39,7 @@ import {
 import { AgentDialog } from "@/components/agents/agent-dialog";
 import { apiFetch } from "@/lib/api-client";
 import { hasCredential } from "@/lib/agent-credentials";
+import { subscribeToProjectTasks } from "@/lib/project-events";
 import {
   fetchAgentModelDefaults,
   FALLBACK_AGENT_MODEL_DEFAULTS,
@@ -117,6 +118,13 @@ export default function ProjectWorkspacePage() {
 
   useEffect(() => {
     if (!projectId) return;
+    const unsubscribe = subscribeToProjectTasks(
+      projectId,
+      (updated) => setTasks((current) => current.some((task) => task.id === updated.id)
+        ? current.map((task) => task.id === updated.id ? updated : task)
+        : [...current, updated]),
+      (taskId) => setTasks((current) => current.filter((task) => task.id !== taskId)),
+    );
     const timer = window.setInterval(async () => {
       try {
         const [latestTasks, latestEvents] = await Promise.all([
@@ -126,8 +134,8 @@ export default function ProjectWorkspacePage() {
         setTasks(latestTasks);
         setAuditEvents(latestEvents);
       } catch { /* Keep showing the last known project state. */ }
-    }, 3000);
-    return () => window.clearInterval(timer);
+    }, 30000);
+    return () => { unsubscribe(); window.clearInterval(timer); };
   }, [projectId]);
 
   const hasAgentKey = useMemo(() => {
@@ -171,6 +179,12 @@ export default function ProjectWorkspacePage() {
   const completedTasks = tasks.filter((t) => t.status === "DONE").length;
   const inProgressTasks = tasks.filter((t) => t.status === "IN_PROGRESS" || t.status === "REVIEW").length;
   const progressPercent = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
+  const agentName = (agentId?: string | null) =>
+    agents.find((agent) => agent.id === agentId)?.name || "Unknown agent";
+  const humanName = (userId?: string | null) => {
+    const user = members.find((member) => member.user_id === userId)?.user;
+    return user?.username || user?.email || "Unknown collaborator";
+  };
 
   // Filter tasks for Tab 3
   const filteredTasks = tasks.filter((t) => {
@@ -565,7 +579,7 @@ export default function ProjectWorkspacePage() {
                   </div>
                 ) : (
                   <div className="relative border-l-2 border-border/60 ml-4 pl-6 space-y-6">
-                    {tasks.map((task, idx) => {
+                    {tasks.map((task) => {
                       // Determine if task assigned to human or agent
                       const isAssignedToAgent = Boolean(task.assigned_agent_id);
                       const isAssignedToHuman = Boolean(task.assigned_user_id);
@@ -581,7 +595,7 @@ export default function ProjectWorkspacePage() {
                                 ? "border-violet-400 bg-violet-950 text-violet-300 ring-2 ring-violet-500/20"
                                 : isAssignedToHuman ? "border-cyan-400 bg-cyan-950 text-cyan-300 ring-2 ring-cyan-500/20" : "border-border bg-muted text-muted-foreground"
                             }`}
-                            title={isAssignedToAgent ? "Autonomous Agent Execution" : isAssignedToHuman ? "Human Engineer Execution" : "Unassigned task"}
+                            title={isAssignedToAgent ? agentName(task.assigned_agent_id) : isAssignedToHuman ? humanName(task.assigned_user_id) : "Unassigned task"}
                           >
                             {isAssignedToAgent ? (
                               <Bot className="w-3 h-3 text-violet-300" />
@@ -619,6 +633,15 @@ export default function ProjectWorkspacePage() {
                                   </p>
                                 )}
                                 {task.result?.stage && <p className="text-[11px] text-primary">{task.result.stage}{task.result.files?.length ? ` · ${task.result.files.join(", ")}` : ""}</p>}
+                                {task.result?.changes?.length ? (
+                                  <div className="flex flex-wrap gap-1 pt-1">
+                                    {task.result.changes.map((change) => (
+                                      <span key={change.path} className="border border-border/70 bg-muted/40 px-1.5 py-0.5 text-[10px] font-mono text-muted-foreground">
+                                        {change.path} <span className="text-emerald-400">+{change.additions}</span> <span className="text-rose-400">-{change.deletions}</span>
+                                      </span>
+                                    ))}
+                                  </div>
+                                ) : null}
                               </div>
 
                               {/* Actor Marker Badge */}
@@ -626,12 +649,12 @@ export default function ProjectWorkspacePage() {
                                 {isAssignedToAgent ? (
                                   <div className="flex items-center gap-1.5 px-2 py-0.5 border border-violet-500/30 bg-violet-500/10 text-violet-300 rounded-none text-[10px] font-mono font-medium">
                                     <span className="w-1.5 h-1.5 rounded-full bg-violet-400" />
-                                    <span>Agent Worker</span>
+                                    <span>{agentName(task.assigned_agent_id)}</span>
                                   </div>
                                 ) : task.assigned_user_id ? (
                                   <div className="flex items-center gap-1.5 px-2 py-0.5 border border-cyan-500/30 bg-cyan-500/10 text-cyan-300 rounded-none text-[10px] font-mono font-medium">
                                     <span className="w-1.5 h-1.5 rounded-full bg-cyan-400" />
-                                    <span>Human Dev</span>
+                                    <span>{humanName(task.assigned_user_id)}</span>
                                   </div>
                                 ) : (
                                   <div className="px-2 py-0.5 border border-border text-muted-foreground text-[10px] font-mono">Unassigned</div>
@@ -720,13 +743,15 @@ export default function ProjectWorkspacePage() {
                       {t.assigned_agent_id ? (
                         <div className="flex items-center gap-1 text-[10px] font-mono text-violet-400 border border-violet-500/30 px-1.5 py-0.5 bg-violet-500/10">
                           <Bot className="w-3 h-3" />
-                          <span>Agent Active</span>
+                          <span>{agentName(t.assigned_agent_id)}</span>
                         </div>
-                      ) : (
+                      ) : t.assigned_user_id ? (
                         <div className="flex items-center gap-1 text-[10px] font-mono text-cyan-400 border border-cyan-500/30 px-1.5 py-0.5 bg-cyan-500/10">
                           <Users className="w-3 h-3" />
-                          <span>Human Worker</span>
+                          <span>{humanName(t.assigned_user_id)}</span>
                         </div>
+                      ) : (
+                        <div className="text-[10px] font-mono text-muted-foreground border border-border px-1.5 py-0.5">Unassigned</div>
                       )}
                       <Link href={`/projects/${project.id}/tasks`}>
                         <Button size="sm" variant="ghost" className="h-7 px-2 text-xs gap-1">

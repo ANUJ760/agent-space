@@ -7,6 +7,7 @@ import shutil
 import subprocess
 import tempfile
 import uuid
+from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path, PurePosixPath
 from urllib.parse import urlsplit
@@ -55,7 +56,7 @@ def _git(root: Path, *args: str, env: dict[str, str] | None = None) -> str:
 
 
 @contextmanager
-def _git_lock(root: Path):
+def _git_lock(root: Path) -> Iterator[None]:
     with (root / ".git" / "agentspace.lock").open("w") as handle:
         fcntl.flock(handle, fcntl.LOCK_EX)
         yield
@@ -80,7 +81,7 @@ def list_files(project_id: uuid.UUID) -> list[dict[str, str | int]]:
     root = workspace_dir(project_id)
     if not root.exists():
         return []
-    files = []
+    files: list[dict[str, str | int]] = []
     for current, dirs, names in os.walk(root, followlinks=False):
         dirs[:] = [name for name in dirs if not name.startswith(".") and not (Path(current) / name).is_symlink()]
         for name in names:

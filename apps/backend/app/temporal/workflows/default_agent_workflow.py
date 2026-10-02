@@ -37,7 +37,11 @@ class DefaultAgentTaskWorkflow:
             self._status = "FAILED"
             await workflow.execute_activity(
                 fail_default_agent_task,
-                {"task_id": payload["task_id"], "error": str(exc)[:2048]},
+                {
+                    "task_id": payload["task_id"],
+                    "agent_id": payload["agent_id"],
+                    "error": str(exc)[:2048],
+                },
                 start_to_close_timeout=timedelta(seconds=30),
             )
             raise

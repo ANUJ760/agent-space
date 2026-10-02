@@ -6,6 +6,19 @@ import type { Agent, Project, Task } from "@/types/api";
 
 type FileEntry = { path: string; size: number };
 type ProposedFile = { path: string; content: string };
+type FileChange = { path: string; additions: number; deletions: number };
+
+function lineChanges(path: string, before: string, after: string): FileChange {
+  const oldLines = before ? before.split("\n") : [];
+  const newLines = after ? after.split("\n") : [];
+  const oldCounts = new Map<string, number>();
+  const newCounts = new Map<string, number>();
+  oldLines.forEach((line) => oldCounts.set(line, (oldCounts.get(line) || 0) + 1));
+  newLines.forEach((line) => newCounts.set(line, (newCounts.get(line) || 0) + 1));
+  let unchanged = 0;
+  oldCounts.forEach((count, line) => { unchanged += Math.min(count, newCounts.get(line) || 0); });
+  return { path, additions: Math.max(0, newLines.length - unchanged), deletions: Math.max(0, oldLines.length - unchanged) };
+}
 
 function parseJson(raw: string): Record<string, unknown> {
   const parsed = JSON.parse(raw.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, ""));
@@ -66,10 +79,14 @@ export async function runAssignedTask(project: Project, task: Task, agent: Agent
   if (!Array.isArray(files) || !files.length || !files.every((file): file is ProposedFile => Boolean(file) && typeof file.path === "string" && typeof file.content === "string" && selected.includes(file.path))) {
     throw new Error("Agent did not return valid changes to the assigned files");
   }
+  const changes = files.map((file) => lineChanges(file.path, snapshots.get(file.path) ?? "", file.content));
   await assertAssignment(task, agent);
-  await updateProgress(task, "Applying shared edits", { files: files.map((file) => file.path) });
-  for (const file of files) {
+  await updateProgress(task, "Applying shared edits", { files: files.map((file) => file.path), changes });
+  for (const [index, file] of files.entries()) {
     await assertAssignment(task, agent);
+    await updateProgress(task, `Applying ${file.path} (${index + 1}/${files.length})`, {
+      files: files.map((entry) => entry.path), changes, active_file: file.path,
+    });
     if (snapshots.has(file.path)) {
       const current = await apiFetch<{ content: string }>(`/api/v1/projects/${project.id}/workspace/file?path=${encodeURIComponent(file.path)}`);
       if (current.content !== snapshots.get(file.path)) throw new Error(`${file.path} changed while the agent was working. Review and retry the task.`);
@@ -79,6 +96,6 @@ export async function runAssignedTask(project: Project, task: Task, agent: Agent
     await applyWorkspaceFile(project.id, file.path, file.content, snapshots.get(file.path) ?? "");
   }
   await apiFetch(`/api/v1/projects/${project.id}/workspace/checkpoints`, { method: "POST", body: JSON.stringify({ message: `Agent task: ${task.title}` }) });
-  await updateProgress(task, "Ready for review", { summary: String(result.summary || "Changes applied"), files: files.map((file) => file.path) });
+  await updateProgress(task, "Ready for review", { summary: String(result.summary || "Changes applied"), files: files.map((file) => file.path), changes });
   await apiFetch(`/api/v1/tasks/${task.id}/transition`, { method: "POST", body: JSON.stringify({ status: "REVIEW", reason: "Agent changes applied to shared workspace" }) });
 }

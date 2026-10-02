@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import difflib
 import json
 import re
 import uuid
@@ -146,6 +147,19 @@ async def execute_default_agent_task(payload: dict[str, str]) -> dict[str, Any]:
     if len(paths) != len(set(paths)):
         raise ValueError("Agent returned duplicate file paths")
 
+    changes = []
+    for item in files:
+        before = snapshots.get(item["path"], "").splitlines()
+        after = item["content"].splitlines()
+        diff = list(difflib.ndiff(before, after))
+        changes.append(
+            {
+                "path": item["path"],
+                "additions": sum(line.startswith("+ ") for line in diff),
+                "deletions": sum(line.startswith("- ") for line in diff),
+            }
+        )
+
     # Check every target before the first write so a human edit cannot leave a
     # partially applied multi-file response.
     for path in paths:
@@ -157,17 +171,34 @@ async def execute_default_agent_task(payload: dict[str, str]) -> dict[str, Any]:
         elif target.exists():
             raise RuntimeError(f"{path} was created during agent work; review and retry")
 
-    await _stage(task_id, agent_id, "Applying shared edits", extra={"files": paths})
+    await _stage(
+        task_id,
+        agent_id,
+        "Applying shared edits",
+        extra={"files": paths, "changes": changes},
+    )
     activity.heartbeat("applying")
-    for item in files:
+    for index, item in enumerate(files):
         path = item["path"]
+        await _stage(
+            task_id,
+            agent_id,
+            f"Applying {path} ({index + 1}/{len(files)})",
+            extra={"files": paths, "changes": changes, "active_file": path},
+        )
         if path in snapshots:
             await asyncio.to_thread(workspace.write_file, project_id, path, item["content"])
         else:
             await asyncio.to_thread(workspace.write_file, project_id, path, item["content"], create_only=True)
     checkpoint = await asyncio.to_thread(workspace.checkpoint, project_id, f"Agent task: {task_title}", "Default Gemini Agent")
     summary = str(generated.get("summary") or "Changes applied")[:2048]
-    result = {"stage": "Ready for review", "summary": summary, "files": paths, "commit": checkpoint["commit"]}
+    result = {
+        "stage": "Ready for review",
+        "summary": summary,
+        "files": paths,
+        "changes": changes,
+        "commit": checkpoint["commit"],
+    }
     async with db.session_factory() as session:
         task = await session.scalar(select(Task).where(Task.id == task_id).with_for_update())
         if task is None or task.assigned_agent_id != agent_id or task.status != "IN_PROGRESS":
@@ -192,7 +223,11 @@ async def fail_default_agent_task(payload: dict[str, str]) -> None:
     db = get_db_manager()
     async with db.session_factory() as session:
         task = await session.scalar(select(Task).where(Task.id == task_id).with_for_update())
-        if task and task.status in {"CLAIMED", "IN_PROGRESS"}:
+        if (
+            task
+            and task.assigned_agent_id == uuid.UUID(payload["agent_id"])
+            and task.status in {"CLAIMED", "IN_PROGRESS"}
+        ):
             task.status = "FAILED"
             task.error_message = payload.get("error", "Agent work failed")[:2048]
             task.result = {"stage": "Needs attention"}

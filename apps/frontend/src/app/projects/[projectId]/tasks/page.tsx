@@ -27,7 +27,8 @@ import { apiFetch } from "@/lib/api-client";
 import { getCredential } from "@/lib/agent-credentials";
 import { runAssignedTask } from "@/lib/task-agent-runner";
 import { fetchAgentModelDefaults } from "@/lib/agent-model-defaults";
-import { Task, Project, Agent } from "@/types/api";
+import { subscribeToProjectTasks } from "@/lib/project-events";
+import { Task, Project, Agent, ProjectMember } from "@/types/api";
 
 const KANBAN_COLUMNS: Array<{
   status: Task["status"];
@@ -50,7 +51,8 @@ export default function ProjectKanbanPage() {
   const [project, setProject] = useState<Project | null>(null);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [agents, setAgents] = useState<Agent[]>([]);
-  const [selectedAgents, setSelectedAgents] = useState<Record<string, string>>({});
+  const [members, setMembers] = useState<ProjectMember[]>([]);
+  const [selectedWorkers, setSelectedWorkers] = useState<Record<string, string>>({});
   const [runningTaskId, setRunningTaskId] = useState<string | null>(null);
   const [plannerAvailable, setPlannerAvailable] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -63,15 +65,17 @@ export default function ProjectKanbanPage() {
     setIsLoading(true);
     setError(null);
     try {
-      const [proj, taskList, agentList, defaults] = await Promise.all([
+      const [proj, taskList, agentList, memberList, defaults] = await Promise.all([
         apiFetch<Project>(`/api/v1/projects/${projectId}`),
         apiFetch<Task[]>(`/api/v1/projects/${projectId}/tasks`),
         apiFetch<Agent[]>(`/api/v1/projects/${projectId}/agents`),
+        apiFetch<ProjectMember[]>(`/api/v1/projects/${projectId}/members`),
         fetchAgentModelDefaults(true),
       ]);
       setProject(proj);
       setTasks(taskList || []);
       setAgents(agentList || []);
+      setMembers(memberList || []);
       setPlannerAvailable(Boolean(defaults.default_agent_available));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load project tasks");
@@ -86,27 +90,39 @@ export default function ProjectKanbanPage() {
 
   useEffect(() => {
     if (!projectId) return;
+    const unsubscribe = subscribeToProjectTasks(
+      projectId,
+      (updated) => setTasks((current) => current.some((task) => task.id === updated.id)
+        ? current.map((task) => task.id === updated.id ? updated : task)
+        : [...current, updated]),
+      (taskId) => setTasks((current) => current.filter((task) => task.id !== taskId)),
+    );
     const timer = window.setInterval(async () => {
       try { setTasks(await apiFetch<Task[]>(`/api/v1/projects/${projectId}/tasks`)); } catch { /* Keep the last visible state. */ }
-    }, 3000);
-    return () => window.clearInterval(timer);
+    }, 30000);
+    return () => { unsubscribe(); window.clearInterval(timer); };
   }, [projectId]);
 
   const handleAssignAndRun = async (task: Task) => {
     if (!project) return;
-    const agent = agents.find((entry) => entry.id === (selectedAgents[task.id] || task.assigned_agent_id));
-    if (!agent) { setActionError("Choose an agent for this task."); return; }
-    if (!plannerAvailable) { setActionError("Set DEFAULT_GEMINI_API_KEY to enable planner coordination."); return; }
-    if (agent.model_provider !== "default" && !getCredential(agent.id)) { setActionError(`Attach ${agent.name}'s API key on the Agents page in this browser.`); return; }
+    const currentValue = task.assigned_agent_id ? `AGENT:${task.assigned_agent_id}` : task.assigned_user_id ? `HUMAN:${task.assigned_user_id}` : "";
+    const workerValue = selectedWorkers[task.id] || currentValue;
+    const [assigneeType, assigneeId] = workerValue.split(":");
+    if (!assigneeId || !["AGENT", "HUMAN"].includes(assigneeType)) { setActionError("Choose an agent or human for this task."); return; }
+    const agent = assigneeType === "AGENT" ? agents.find((entry) => entry.id === assigneeId) : undefined;
+    if (assigneeType === "AGENT" && !agent) { setActionError("The selected agent is unavailable."); return; }
+    if (agent && !plannerAvailable) { setActionError("Set DEFAULT_GEMINI_API_KEY to enable planner coordination."); return; }
+    if (agent && agent.model_provider !== "default" && !getCredential(agent.id)) { setActionError(`Attach ${agent.name}'s API key on the Agents page in this browser.`); return; }
     setRunningTaskId(task.id);
     setActionError(null);
     try {
-      let assigned = task;
-      if (task.status === "TODO") {
-        assigned = await apiFetch<Task>(`/api/v1/tasks/${task.id}/assign`, { method: "POST", body: JSON.stringify({ assignee_type: "AGENT", assignee_id: agent.id }) });
-      }
+      const isReassignment = Boolean(task.assigned_agent_id || task.assigned_user_id || task.status !== "TODO");
+      const assigned = await apiFetch<Task>(`/api/v1/tasks/${task.id}/assign`, {
+        method: "POST",
+        body: JSON.stringify({ assignee_type: assigneeType, assignee_id: assigneeId, allow_takeover: isReassignment }),
+      });
+      if (!agent) { await fetchData(); return; }
       if (agent.model_provider === "default") {
-        if (task.status !== "TODO") throw new Error("Default agent tasks run in the background after assignment. Check the live task status for progress.");
         await fetchData();
         return;
       }
@@ -118,6 +134,31 @@ export default function ProjectKanbanPage() {
       try { await apiFetch(`/api/v1/tasks/${task.id}`, { method: "PATCH", body: JSON.stringify({ error_message: message.slice(0, 2048), result: { stage: "Needs attention" } }) }); } catch { /* Surface the original error. */ }
       await fetchData();
     } finally { setRunningTaskId(null); }
+  };
+
+  const handleRelease = async (task: Task) => {
+    setTransitioningTaskId(task.id);
+    setActionError(null);
+    try {
+      const updated = await apiFetch<Task>(`/api/v1/tasks/${task.id}/release`, { method: "POST" });
+      setSelectedWorkers((current) => ({ ...current, [task.id]: "" }));
+      setTasks((current) => current.map((entry) => entry.id === updated.id ? updated : entry));
+    } catch (cause) { setActionError(cause instanceof Error ? cause.message : "Could not release task"); }
+    finally { setTransitioningTaskId(null); }
+  };
+
+  const handleTakeover = async (task: Task) => {
+    setTransitioningTaskId(task.id);
+    setActionError(null);
+    try {
+      const updated = await apiFetch<Task>(`/api/v1/tasks/${task.id}/takeover`, {
+        method: "POST",
+        body: JSON.stringify({ expected_version: task.version, reason: "Human takeover from task board" }),
+      });
+      setSelectedWorkers((current) => ({ ...current, [task.id]: `HUMAN:${updated.assigned_user_id}` }));
+      setTasks((current) => current.map((entry) => entry.id === updated.id ? updated : entry));
+    } catch (cause) { setActionError(cause instanceof Error ? cause.message : "Could not take over task"); }
+    finally { setTransitioningTaskId(null); }
   };
 
   const handlePlan = async () => {
@@ -198,7 +239,7 @@ export default function ProjectKanbanPage() {
               ({tasks.length} total)
             </span>
           </h1>
-          <p className="text-xs text-muted-foreground">Assigned agents edit shared files live and create a Git checkpoint. Keep this tab open while an agent is working.</p>
+          <p className="text-xs text-muted-foreground">Assigned workers share the project files and checkpoints. User-key agents run in this browser; the default agent continues in the background.</p>
         </div>
 
         <div className="flex items-center gap-3">
@@ -291,8 +332,13 @@ export default function ProjectKanbanPage() {
                   ) : (
                     columnTasks.map((task) => {
                       const isTransitioning = transitioningTaskId === task.id;
-                      const selectedAgent = agents.find((agent) => agent.id === (selectedAgents[task.id] || task.assigned_agent_id));
-                      const defaultAgentIsRunning = selectedAgent?.model_provider === "default" && task.status !== "TODO";
+                      const assignedValue = task.assigned_agent_id ? `AGENT:${task.assigned_agent_id}` : task.assigned_user_id ? `HUMAN:${task.assigned_user_id}` : "";
+                      const workerValue = selectedWorkers[task.id] ?? assignedValue;
+                      const [workerType, workerId] = workerValue.split(":");
+                      const selectedAgent = workerType === "AGENT" ? agents.find((agent) => agent.id === workerId) : undefined;
+                      const assignmentChanged = workerValue !== assignedValue;
+                      const defaultAgentIsRunning = selectedAgent?.model_provider === "default" && task.status !== "TODO" && !assignmentChanged;
+                      const humanAssignmentUnchanged = workerType === "HUMAN" && Boolean(assignedValue) && !assignmentChanged;
 
                       return (
                         <Card
@@ -318,12 +364,21 @@ export default function ProjectKanbanPage() {
                             {task.result?.stage && <p className="text-[11px] text-primary">{task.result.stage}{task.result.files?.length ? ` · ${task.result.files.join(", ")}` : ""}</p>}
                             {task.result?.summary && <p className="text-[11px] text-muted-foreground">{task.result.summary}</p>}
                             {task.error_message && <p className="text-[11px] text-destructive">{task.error_message}</p>}
-                            {(task.status === "TODO" || task.status === "CLAIMED" || task.status === "IN_PROGRESS") && <div className="space-y-1.5">
-                              <select aria-label={`Agent for ${task.title}`} className="w-full rounded border bg-background p-1.5 text-[11px]" value={selectedAgents[task.id] || task.assigned_agent_id || ""} disabled={task.status !== "TODO"} onChange={(event) => setSelectedAgents((old) => ({ ...old, [task.id]: event.target.value }))}>
-                                <option value="">Assign an agent</option>
-                                {agents.map((agent) => <option key={agent.id} value={agent.id}>{agent.name} · {agent.model_provider}</option>)}
+                            {!(["DONE", "CANCELLED"].includes(task.status)) && <div className="space-y-1.5">
+                              <select aria-label={`Worker for ${task.title}`} className="w-full rounded border bg-background p-1.5 text-[11px]" value={workerValue} onChange={(event) => setSelectedWorkers((old) => ({ ...old, [task.id]: event.target.value }))}>
+                                <option value="">Assign a worker</option>
+                                <optgroup label="Agents">
+                                  {agents.map((agent) => <option key={agent.id} value={`AGENT:${agent.id}`}>{agent.name} · {agent.model_provider}</option>)}
+                                </optgroup>
+                                <optgroup label="Humans">
+                                  {members.map((member) => <option key={member.user_id} value={`HUMAN:${member.user_id}`}>{member.user?.username || member.user?.email || `User ${member.user_id.slice(0, 8)}`}</option>)}
+                                </optgroup>
                               </select>
-                              <Button size="sm" className="w-full h-7 text-[11px]" disabled={defaultAgentIsRunning || runningTaskId === task.id || !plannerAvailable || !selectedAgent} onClick={() => handleAssignAndRun(task)}>{defaultAgentIsRunning ? "Running in background…" : runningTaskId === task.id ? "Working in shared files…" : task.status === "TODO" ? "Assign and start" : "Resume agent work"}</Button>
+                              <div className="flex gap-1">
+                                <Button size="sm" className="h-7 flex-1 text-[11px]" disabled={defaultAgentIsRunning || humanAssignmentUnchanged || runningTaskId === task.id || !workerId || (workerType === "AGENT" && !plannerAvailable)} onClick={() => handleAssignAndRun(task)}>{defaultAgentIsRunning ? "Running in background…" : humanAssignmentUnchanged ? "Assigned to human" : runningTaskId === task.id ? "Starting…" : assignedValue ? assignmentChanged ? workerType === "AGENT" ? "Reassign and start" : "Reassign human" : "Restart agent" : workerType === "AGENT" ? "Assign and start" : "Assign human"}</Button>
+                                {assignedValue && <Button variant="outline" size="sm" className="h-7 px-2 text-[10px]" disabled={isTransitioning} onClick={() => handleRelease(task)}>Release</Button>}
+                              </div>
+                              {task.assigned_agent_id && task.status !== "TODO" && <Button variant="outline" size="sm" className="h-7 w-full text-[10px]" disabled={isTransitioning} onClick={() => handleTakeover(task)}>Take over as me</Button>}
                             </div>}
                             {/* Worker Assignment & Dependencies */}
                             <div className="flex flex-wrap items-center gap-1.5 text-[10px] text-muted-foreground pt-1 border-t">
@@ -333,7 +388,7 @@ export default function ProjectKanbanPage() {
                                 </span>
                               ) : task.assigned_user_id ? (
                                 <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-muted font-mono">
-                                  <span>user</span>
+                                  <span>{members.find((member) => member.user_id === task.assigned_user_id)?.user?.username || `User ${task.assigned_user_id.slice(0, 8)}`}</span>
                                 </span>
                               ) : (
                                 <span className="text-muted-foreground/60 italic">
@@ -389,7 +444,7 @@ export default function ProjectKanbanPage() {
                                     variant="outline"
                                     size="sm"
                                     className="h-6 text-[10px] px-1.5"
-                                    onClick={() => handleTransition(task, "TODO")}
+                                    onClick={() => handleRelease(task)}
                                     disabled={isTransitioning}
                                     title="Release"
                                   >
