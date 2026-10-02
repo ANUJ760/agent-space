@@ -35,7 +35,9 @@ resource "aws_efs_file_system" "workspace" {
 }
 
 resource "aws_efs_mount_target" "workspace" {
-  for_each        = toset(var.subnet_ids)
+  # Subnet IDs are unknown until the VPC is created. Stable index keys let
+  # OpenTofu determine the mount-target instances during the initial plan.
+  for_each        = { for index, subnet_id in var.subnet_ids : tostring(index) => subnet_id }
   file_system_id  = aws_efs_file_system.workspace.id
   subnet_id       = each.value
   security_groups = [aws_security_group.efs.id]

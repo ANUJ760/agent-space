@@ -92,6 +92,11 @@ var/workspaces/
 tmp/
 *.log
 
+# OpenTofu local cache and saved plans (plans may contain sensitive values)
+**/.terraform/
+*.tfplan
+*.plan
+
 # Design reference docs (kept uncommitted as requested by user)
 Agent_Space_AI_Agent_Build_Guide.md
 Agent_Space_Technical_Design.docx
