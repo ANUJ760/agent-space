@@ -30,7 +30,7 @@ resource "random_password" "session_secret" {
   special = false
 }
 
-# AWS Secrets Manager Secret container
+# AWS Secrets Manager credentials used to build the backend's runtime URLs.
 resource "aws_secretsmanager_secret" "app_secrets" {
   name        = "${var.name_prefix}/app-secrets"
   description = "Enterprise runtime credentials for AgentSpace application"
@@ -44,11 +44,20 @@ resource "aws_secretsmanager_secret" "app_secrets" {
 resource "aws_secretsmanager_secret_version" "app_secrets" {
   secret_id = aws_secretsmanager_secret.app_secrets.id
   secret_string = jsonencode({
-    DATABASE_PASSWORD      = random_password.db_password.result
-    REDIS_AUTH_TOKEN       = random_password.redis_auth.result
-    SESSION_SIGNING_KEY    = random_password.session_secret.result
-    OPENAI_API_KEY         = "managed-externally"
-    ANTHROPIC_API_KEY      = "managed-externally"
-    KEYCLOAK_CLIENT_SECRET = "managed-externally"
+    DB_PASSWORD    = random_password.db_password.result
+    REDIS_PASSWORD = random_password.redis_auth.result
+    SECRET_KEY     = random_password.session_secret.result
+  })
+}
+
+# Create the container only. Add its value outside OpenTofu so the developer's
+# Gemini API key never appears in the OpenTofu configuration or state.
+resource "aws_secretsmanager_secret" "default_gemini_api_key" {
+  name        = "${var.name_prefix}/default-gemini-api-key"
+  description = "Gemini API key for the shared default agent and planner"
+  kms_key_id  = aws_kms_key.main.arn
+
+  tags = merge(var.tags, {
+    Name = "${var.name_prefix}-default-gemini-api-key"
   })
 }

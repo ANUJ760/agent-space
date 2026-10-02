@@ -20,6 +20,10 @@ Modern AI coding tools are predominantly isolated chatbots, disposable code gene
 
 ## 2. System Architecture
 
+For the implemented local request paths and current service status, see the
+[working backend flowchart](docs/working-backend-flowchart.svg). The topology below
+describes the broader target architecture.
+
 ### High-Level Component Topology
 
 ```mermaid
@@ -211,43 +215,7 @@ frontend. See [workspace architecture](docs/workspace_architecture.md).
 
 ---
 
-## 5. Seeded Accounts & Access Matrix
-
-The seeding script provisions the following accounts without preset passwords.
-After applying migrations, set a password for each account you want to use:
-
-```bash
-PYTHONPATH=apps/backend:. python3 scripts/set_user_password.py admin
-PYTHONPATH=apps/backend:. python3 scripts/set_user_password.py lead
-```
-
-The command prompts without echoing the password. Existing accounts created
-before password hashing also need a password set this way.
-
-### 1. Protected Administrator Portal
-- **URL**: [http://localhost:3000/admin/login](http://localhost:3000/admin/login)
-- **Direct Protected Endpoint**: `POST /api/v1/auth/admin/login`
-
-| Username | Role | Constraints |
-| :--- | :--- | :--- |
-| **`admin`** | `ORG_ADMIN` | No signup on admin login. Cannot authenticate via standard `/login` route. |
-
-### 2. Standard Workspace Members
-- **URL**: [http://localhost:3000/login](http://localhost:3000/login)
-- **Direct Endpoint**: `POST /api/v1/auth/login`
-
-| Username | Role | Permissions |
-| :--- | :--- | :--- |
-| **`lead`** | `PROJECT_OWNER` | Full project management, task creation, approval gates |
-| **`developer`** | `MEMBER` | Claim tasks, pair program with AI agents, review code |
-| **`auditor`** | `VIEWER` | Read-only inspection of audit trail and compliance logs |
-
-### 3. Autonomous AI Agents
-- **`DevOps-Agent-01`** (`devops-agent-01`): Powered by `claude-3-5-sonnet`, equipped with `ci_cd`, `code_review`, `container_orchestration`, and `security_scanning` capabilities.
-
----
-
-## 6. Frontend Navigation & Workspace Features
+## 5. Frontend Navigation & Workspace Features
 
 - **Dark Obsidian Aesthetic**: Deep carbon palette (`--background: 240 12% 4%`) with sharp technical cards and slim navigation headers (`h-11`).
 - **Curved High-Contrast Auth**: Frosted glassmorphism (`rounded-[32px]`), electric glow highlights, and minimal text.
@@ -263,7 +231,7 @@ before password hashing also need a password set this way.
 
 ---
 
-## 7. Container Build & Docker Support
+## 6. Container Build & Docker Support
 
 Build the hardened production container:
 
@@ -277,7 +245,7 @@ podman build -t agent-space:frontend --target frontend .
 
 ---
 
-## 8. Verification & Test Suites
+## 7. Verification & Test Suites
 
 Agent Space maintains comprehensive test coverage across both backend and frontend:
 
@@ -294,7 +262,7 @@ npm run type-check --workspace=@agent-space/frontend
 
 ---
 
-## 9. Comprehensive Documentation Index
+## 8. Comprehensive Documentation Index
 
 For in-depth operational specifications, consult the complete documentation suite:
 
@@ -309,6 +277,6 @@ For in-depth operational specifications, consult the complete documentation suit
 
 ---
 
-## 10. License
+## 9. License
 
 This project is licensed under the [Apache 2.0 License](LICENSE).

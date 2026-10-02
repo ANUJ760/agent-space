@@ -10,10 +10,22 @@
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
+type ApiFetchOptions = RequestInit & {
+  redirectOnAuthError?: boolean;
+};
+
+export class ApiRequestError extends Error {
+  constructor(message: string, readonly status: number) {
+    super(message);
+    this.name = "ApiRequestError";
+  }
+}
+
 export async function apiFetch<T>(
   endpoint: string,
-  options: RequestInit = {}
+  options: ApiFetchOptions = {}
 ): Promise<T> {
+  const { redirectOnAuthError = true, ...fetchOptions } = options;
   const token =
     typeof window !== "undefined"
       ? localStorage.getItem("agentspace_token")
@@ -21,7 +33,7 @@ export async function apiFetch<T>(
 
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
-    ...(options.headers as Record<string, string>),
+    ...(fetchOptions.headers as Record<string, string>),
   };
 
   if (token) {
@@ -29,7 +41,7 @@ export async function apiFetch<T>(
   }
 
   // Generate Idempotency-Key for mutating HTTP verbs if not explicitly set
-  const method = (options.method || "GET").toUpperCase();
+  const method = (fetchOptions.method || "GET").toUpperCase();
   if (["POST", "PUT", "PATCH", "DELETE"].includes(method) && !headers["Idempotency-Key"]) {
     headers["Idempotency-Key"] =
       typeof crypto !== "undefined" && crypto.randomUUID
@@ -40,26 +52,32 @@ export async function apiFetch<T>(
   const url = endpoint.startsWith("http") ? endpoint : `${API_BASE_URL}${endpoint}`;
 
   const res = await fetch(url, {
-    ...options,
+    ...fetchOptions,
     headers,
   });
 
-  if (res.status === 401 && typeof window !== "undefined") {
+  if (redirectOnAuthError && res.status === 401 && typeof window !== "undefined") {
     localStorage.removeItem("agentspace_token");
     localStorage.removeItem("agentspace_user");
     window.location.href = "/login";
     throw new Error("Unauthorized");
   }
 
-  if (res.status === 403 && typeof window !== "undefined") {
+  if (redirectOnAuthError && res.status === 403 && typeof window !== "undefined") {
     window.location.href = "/unauthorized";
     throw new Error("Forbidden");
   }
 
   if (!res.ok) {
     const errorData = await res.json().catch(() => ({}));
-    throw new Error(
-      errorData?.message || errorData?.detail || `API Request failed with status ${res.status}`
+    const message = typeof errorData?.message === "string"
+      ? errorData.message
+      : typeof errorData?.detail === "string"
+        ? errorData.detail
+        : `Request failed with status ${res.status}`;
+    throw new ApiRequestError(
+      message,
+      res.status
     );
   }
 

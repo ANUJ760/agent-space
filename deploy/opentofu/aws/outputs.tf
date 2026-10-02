@@ -64,3 +64,13 @@ output "kms_key_arn" {
   description = "Master KMS key ARN for infrastructure encryption"
   value       = module.secrets.kms_key_arn
 }
+
+output "app_secrets_name" {
+  description = "Secrets Manager name for generated application credentials"
+  value       = module.secrets.secrets_name
+}
+
+output "default_gemini_api_key_secret_name" {
+  description = "Secrets Manager name for the developer-managed Gemini API key"
+  value       = module.secrets.default_gemini_api_key_secret_name
+}

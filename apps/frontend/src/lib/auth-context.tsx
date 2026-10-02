@@ -79,6 +79,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       try {
         const response = await apiFetch<AuthTokenResponse>("/api/v1/auth/login", {
           method: "POST",
+          redirectOnAuthError: false,
           body: JSON.stringify({
             username: username.trim(),
             password,
@@ -115,6 +116,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       try {
         const response = await apiFetch<AuthTokenResponse>("/api/v1/auth/admin/login", {
           method: "POST",
+          redirectOnAuthError: false,
           body: JSON.stringify({
             username: username.trim(),
             password,
@@ -149,6 +151,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       try {
         const response = await apiFetch<AuthTokenResponse>("/api/v1/auth/register", {
           method: "POST",
+          redirectOnAuthError: false,
           body: JSON.stringify({
             username: params.username.trim(),
             email: params.email.trim(),

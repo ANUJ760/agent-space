@@ -90,3 +90,35 @@
 .animate-tab-enter {
   animation: fadeInSlide 280ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
+
+@keyframes authErrorEnter {
+  from {
+    opacity: 0;
+    transform: translateY(-8px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes authErrorIcon {
+  0% { transform: scale(0.8); }
+  65% { transform: scale(1.12); }
+  100% { transform: scale(1); }
+}
+
+.auth-error-enter {
+  animation: authErrorEnter 260ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.auth-error-icon {
+  animation: authErrorIcon 350ms ease-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .auth-error-enter,
+  .auth-error-icon {
+    animation: none;
+  }
+}

@@ -1,0 +1,164 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="2000" height="1390" viewBox="0 0 2000 1390" role="img" aria-labelledby="title desc">
+<title id="title">Agent Space working backend flowchart</title>
+<desc id="desc">Implemented browser, API, database, Redis, workspace, Git, and collaboration paths, with conditional Gemini and inactive integrations clearly marked.</desc>
+<defs>
+  <linearGradient id="bg" x2="1" y2="1"><stop stop-color="#07121f"/><stop offset="1" stop-color="#0c1522"/></linearGradient>
+  <filter id="shadow"><feDropShadow dx="0" dy="8" stdDeviation="10" flood-color="#020812" flood-opacity=".32"/></filter>
+  <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto"><path d="M1 1 L9 5 L1 9" fill="none" stroke="#5ed6f7" stroke-width="1.8"/></marker>
+  <marker id="arrow-muted" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto"><path d="M1 1 L9 5 L1 9" fill="none" stroke="#728197" stroke-width="1.8"/></marker>
+  <style>
+    text{font-family:Inter,Arial,sans-serif;fill:#e9f2fb}
+    .title{font-size:38px;font-weight:800;letter-spacing:-1px}
+    .sub{font-size:17px;fill:#a9bccd}
+    .section{font-size:18px;font-weight:800;letter-spacing:1.4px;fill:#8de8ff}
+    .head{font-size:20px;font-weight:800}
+    .body{font-size:15px;fill:#c4d4e1}
+    .small{font-size:13px;fill:#9aafc1}
+    .mono{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:13px;fill:#97bfd0}
+  </style>
+</defs>
+<rect width="100%" height="100%" fill="url(#bg)"/>
+<circle cx="1790" cy="20" r="370" fill="#0d6a82" opacity=".12"/>
+<circle cx="120" cy="1050" r="340" fill="#483b91" opacity=".11"/>
+
+<text x="42" y="58" class="title">AGENT SPACE  /  WORKING BACKEND FLOW</text>
+<text x="43" y="90" class="sub">Actual local wiring · 02 Oct 2026 · arrows show implemented data flow</text>
+<rect x="42" y="111" width="190" height="29" rx="14" fill="#12352d" stroke="#2d8d6d" stroke-width="1.5"/>
+<text x="137.0" y="131" class="small" text-anchor="middle">Verified running</text>
+<rect x="245" y="111" width="198" height="29" rx="14" fill="#102b3d" stroke="#2b7896" stroke-width="1.5"/>
+<text x="344.0" y="131" class="small" text-anchor="middle">Implemented path</text>
+<rect x="456" y="111" width="204" height="29" rx="14" fill="#3b2b1a" stroke="#a77b3b" stroke-width="1.5"/>
+<text x="558.0" y="131" class="small" text-anchor="middle">Needs setup / start</text>
+<rect x="673" y="111" width="212" height="29" rx="14" fill="#1a2430" stroke="#4b596a" stroke-width="1.5"/>
+<text x="779.0" y="131" class="small" text-anchor="middle">Not in active flow</text>
+<rect x="40" y="164" width="1920" height="232" rx="24" fill="#0b1e2d" stroke="#2b5268" stroke-width="1.5"/>
+<text x="67" y="197" class="section">01  HUMAN + BROWSER</text>
+<rect x="67" y="222" width="215" height="124" rx="17" fill="#102b3d" stroke="#2b7896" stroke-width="1.5" filter="url(#shadow)"/>
+<rect x="68" y="240" width="4" height="88" rx="2" fill="#8de8ff"/>
+<text x="89" y="256" class="head">Human</text>
+<text x="89" y="284" class="body">Sign in · create project</text>
+<text x="89" y="306" class="small">Assign tasks · edit files</text>
+<rect x="322" y="222" width="360" height="124" rx="17" fill="#102b3d" stroke="#2b7896" stroke-width="1.5" filter="url(#shadow)"/>
+<rect x="323" y="240" width="4" height="88" rx="2" fill="#8de8ff"/>
+<text x="344" y="256" class="head">Next.js + React</text>
+<text x="344" y="284" class="body">TypeScript · Tailwind CSS</text>
+<text x="344" y="306" class="small">Three.js UI · REST client</text>
+<rect x="722" y="222" width="420" height="124" rx="17" fill="#102b3d" stroke="#2b7896" stroke-width="1.5" filter="url(#shadow)"/>
+<rect x="723" y="240" width="4" height="88" rx="2" fill="#8de8ff"/>
+<text x="744" y="256" class="head">Browser agent runner</text>
+<text x="744" y="284" class="body">User-supplied API keys stay here</text>
+<text x="744" y="306" class="small">Yjs client applies edits to files</text>
+<rect x="1452" y="222" width="470" height="124" rx="17" fill="#3b2b1a" stroke="#a77b3b" stroke-width="1.5" filter="url(#shadow)"/>
+<rect x="1453" y="240" width="4" height="88" rx="2" fill="#ffd393"/>
+<text x="1474" y="256" class="head">Provider APIs</text>
+<text x="1474" y="284" class="body">Gemini · OpenAI · Anthropic</text>
+<text x="1474" y="306" class="small">Direct browser calls for BYOK agents</text>
+<rect x="1816.0" y="235" width="92.0" height="23" rx="11" fill="#684921" stroke="#684921" stroke-width="1.5"/>
+<text x="1862.0" y="251" class="small" text-anchor="middle">KEY NEEDED</text>
+<path d="M282,284 L322,284" fill="none" stroke="#5ed6f7" stroke-width="2.7" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<path d="M682,284 L722,284" fill="none" stroke="#5ed6f7" stroke-width="2.7" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<path d="M1142,284 L1452,284" fill="none" stroke="#5ed6f7" stroke-width="2.7" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<text x="1180" y="270" class="mono">HTTPS from browser</text>
+<rect x="40" y="429" width="1348" height="572" rx="24" fill="#0a1b2a" stroke="#2b5268" stroke-width="1.5"/>
+<text x="67" y="462" class="section">02  PYTHON API BACKEND</text>
+<rect x="67" y="486" width="540" height="112" rx="17" fill="#102b3d" stroke="#2b7896" stroke-width="1.5" filter="url(#shadow)"/>
+<rect x="68" y="504" width="4" height="76" rx="2" fill="#8de8ff"/>
+<text x="89" y="520" class="head">FastAPI + Uvicorn</text>
+<text x="89" y="548" class="body">HTTP REST · project WebSocket gateway</text>
+<text x="89" y="570" class="small">Pydantic settings · request middleware</text>
+<rect x="648" y="486" width="712" height="112" rx="17" fill="#102b3d" stroke="#2b7896" stroke-width="1.5" filter="url(#shadow)"/>
+<rect x="649" y="504" width="4" height="76" rx="2" fill="#8de8ff"/>
+<text x="670" y="520" class="head">Authentication + authorization</text>
+<text x="670" y="548" class="body">Password hash · internal RS256 JWT · RBAC</text>
+<text x="670" y="570" class="small">Admin login isolated; Keycloak is not running</text>
+<path d="M498,346 L498,486" fill="none" stroke="#5ed6f7" stroke-width="2.7" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<rect x="67" y="645" width="1293" height="112" rx="17" fill="#102b3d" stroke="#2b7896" stroke-width="1.5" filter="url(#shadow)"/>
+<rect x="68" y="663" width="4" height="76" rx="2" fill="#8de8ff"/>
+<text x="89" y="679" class="head">API routes and services</text>
+<text x="89" y="707" class="body">/auth · /projects · /tasks · /agents · /health</text>
+<text x="89" y="729" class="small">Planner + default agent call Gemini only when server key is set</text>
+<path d="M339,598 L339,645" fill="none" stroke="#5ed6f7" stroke-width="2.7" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<path d="M1004,598 L1004,645" fill="none" stroke="#5ed6f7" stroke-width="2.7" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<rect x="67" y="811" width="290" height="132" rx="17" fill="#12352d" stroke="#2d8d6d" stroke-width="1.5" filter="url(#shadow)"/>
+<rect x="68" y="829" width="4" height="96" rx="2" fill="#8af3c4"/>
+<text x="89" y="845" class="head">PostgreSQL 16</text>
+<text x="89" y="873" class="body">SQLAlchemy + asyncpg</text>
+<text x="89" y="895" class="small">Users · projects · tasks</text>
+<text x="89" y="917" class="small">Alembic migrations</text>
+<rect x="267" y="824" width="76" height="23" rx="11" fill="#195b46" stroke="#195b46" stroke-width="1.5"/>
+<text x="305.0" y="840" class="small" text-anchor="middle">RUNNING</text>
+<rect x="390" y="811" width="290" height="132" rx="17" fill="#12352d" stroke="#2d8d6d" stroke-width="1.5" filter="url(#shadow)"/>
+<rect x="391" y="829" width="4" height="96" rx="2" fill="#8af3c4"/>
+<text x="412" y="845" class="head">Redis 7</text>
+<text x="412" y="873" class="body">redis-py async client</text>
+<text x="412" y="895" class="small">Rate limits + health</text>
+<text x="412" y="917" class="small">No password locally</text>
+<rect x="590" y="824" width="76" height="23" rx="11" fill="#195b46" stroke="#195b46" stroke-width="1.5"/>
+<text x="628.0" y="840" class="small" text-anchor="middle">RUNNING</text>
+<rect x="713" y="811" width="306" height="132" rx="17" fill="#102b3d" stroke="#2b7896" stroke-width="1.5" filter="url(#shadow)"/>
+<rect x="714" y="829" width="4" height="96" rx="2" fill="#8de8ff"/>
+<text x="735" y="845" class="head">Local workspace + Git</text>
+<text x="735" y="873" class="body">Project folders · file writes</text>
+<text x="735" y="895" class="small">Commits every 5 min</text>
+<text x="735" y="917" class="small">Push via user Git token</text>
+<rect x="1052" y="811" width="308" height="132" rx="17" fill="#3b2b1a" stroke="#a77b3b" stroke-width="1.5" filter="url(#shadow)"/>
+<rect x="1053" y="829" width="4" height="96" rx="2" fill="#ffd393"/>
+<text x="1074" y="845" class="head">Gemini planner</text>
+<text x="1074" y="873" class="body">httpx → Google Gemini API</text>
+<text x="1074" y="895" class="small">Shared default agent</text>
+<text x="1074" y="917" class="small">Server key is unset</text>
+<rect x="1254.0" y="824" width="92.0" height="23" rx="11" fill="#684921" stroke="#684921" stroke-width="1.5"/>
+<text x="1300.0" y="840" class="small" text-anchor="middle">KEY NEEDED</text>
+<path d="M212,757 L212,811" fill="none" stroke="#5ed6f7" stroke-width="2.7" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<path d="M535,757 L535,811" fill="none" stroke="#5ed6f7" stroke-width="2.7" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<path d="M866,757 L866,811" fill="none" stroke="#5ed6f7" stroke-width="2.7" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<path d="M1206,757 L1206,811" fill="none" stroke="#5ed6f7" stroke-width="2.7" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<rect x="1422" y="429" width="538" height="572" rx="24" fill="#0a1b2a" stroke="#2b5268" stroke-width="1.5"/>
+<text x="1449" y="462" class="section">03  LIVE COLLABORATION + GIT</text>
+<rect x="1449" y="486" width="484" height="140" rx="17" fill="#3b2b1a" stroke="#a77b3b" stroke-width="1.5" filter="url(#shadow)"/>
+<rect x="1450" y="504" width="4" height="104" rx="2" fill="#ffd393"/>
+<text x="1471" y="520" class="head">Hocuspocus + Yjs</text>
+<text x="1471" y="548" class="body">Node.js WebSocket collaboration server</text>
+<text x="1471" y="570" class="small">Authenticates through FastAPI</text>
+<text x="1471" y="592" class="small">Currently not running locally</text>
+<rect x="1812.6" y="499" width="106.4" height="23" rx="11" fill="#684921" stroke="#684921" stroke-width="1.5"/>
+<text x="1865.8" y="515" class="small" text-anchor="middle">START NEEDED</text>
+<rect x="1449" y="680" width="484" height="128" rx="17" fill="#102b3d" stroke="#2b7896" stroke-width="1.5" filter="url(#shadow)"/>
+<rect x="1450" y="698" width="4" height="92" rx="2" fill="#8de8ff"/>
+<text x="1471" y="714" class="head">Shared project files</text>
+<text x="1471" y="742" class="body">Yjs snapshots + UTF-8 files</text>
+<text x="1471" y="764" class="small">Same folder used by FastAPI</text>
+<text x="1471" y="786" class="small">Human and agent edits converge</text>
+<rect x="1449" y="857" width="484" height="105" rx="17" fill="#102b3d" stroke="#2b7896" stroke-width="1.5" filter="url(#shadow)"/>
+<rect x="1450" y="875" width="4" height="69" rx="2" fill="#8de8ff"/>
+<text x="1471" y="891" class="head">Remote Git hosting</text>
+<text x="1471" y="919" class="body">GitHub · GitLab · Bitbucket</text>
+<text x="1471" y="941" class="small">Optional HTTPS push with user token</text>
+<path d="M938,346 L938,377 L1691,377 L1691,486" fill="none" stroke="#5ed6f7" stroke-width="2.7" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<text x="1185" y="370" class="mono">WebSocket client</text>
+<path d="M1691,626 L1691,680" fill="none" stroke="#5ed6f7" stroke-width="2.7" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<path d="M1449,744 L1190,744 L1190,795 L866,795 L866,811" fill="none" stroke="#5ed6f7" stroke-width="2.7" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<path d="M866,943 L866,970 L1691,970 L1691,962" fill="none" stroke="#5ed6f7" stroke-width="2.7" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<rect x="40" y="1035" width="1920" height="269" rx="24" fill="#101923" stroke="#465363" stroke-width="1.5" stroke-dasharray="8 7"/>
+<text x="67" y="1070" class="section">04  PRESENT IN REPO / ARCHITECTURE, NOT IN THE CURRENT REQUEST PATH</text>
+<rect x="67" y="1092" width="578" height="155" rx="17" fill="#1a2430" stroke="#4b596a" stroke-width="1.5" filter="url(#shadow)"/>
+<rect x="68" y="1110" width="4" height="119" rx="2" fill="#b8c5d0"/>
+<text x="89" y="1126" class="head">NATS JetStream + Temporal</text>
+<text x="89" y="1154" class="body">Event and workflow clients exist</text>
+<text x="89" y="1176" class="small">No local service; API does not connect</text>
+<text x="89" y="1198" class="small">Temporal worker entrypoint is incomplete</text>
+<rect x="680" y="1092" width="600" height="155" rx="17" fill="#1a2430" stroke="#4b596a" stroke-width="1.5" filter="url(#shadow)"/>
+<rect x="681" y="1110" width="4" height="119" rx="2" fill="#b8c5d0"/>
+<text x="702" y="1126" class="head">Other service integrations</text>
+<text x="702" y="1154" class="body">Keycloak · Qdrant · Gitea · SeaweedFS / S3</text>
+<text x="702" y="1176" class="small">LangGraph · Docker / gVisor sandbox</text>
+<text x="702" y="1198" class="small">Configured or scaffolded; not active here</text>
+<rect x="1315" y="1092" width="618" height="155" rx="17" fill="#1a2430" stroke="#4b596a" stroke-width="1.5" filter="url(#shadow)"/>
+<rect x="1316" y="1110" width="4" height="119" rx="2" fill="#b8c5d0"/>
+<text x="1337" y="1126" class="head">AWS / Kubernetes deployment</text>
+<text x="1337" y="1154" class="body">OpenTofu · EKS · RDS · ElastiCache</text>
+<text x="1337" y="1176" class="small">Secrets Manager · S3 · Kubernetes</text>
+<text x="1337" y="1198" class="small">Infrastructure templates; not deployed locally</text>
+<text x="43" y="1346" class="sub">Current processes: PostgreSQL + Redis containers running. FastAPI, frontend, and collaboration server are implemented but stopped.</text>
+<text x="43" y="1373" class="small">Solid cyan arrows = implemented flow. Gray cards = no live service path; amber cards need a key or running process.</text>
+</svg>

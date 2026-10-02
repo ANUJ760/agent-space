@@ -91,10 +91,10 @@ OIDC_CLIENT_SECRET=change_this_to_your_keycloak_client_secret
 OIDC_JWKS_URL=https://auth.yourdomain.com/realms/agentspace/protocol/openid-connect/certs
 
 # ==============================================================================
-# 5. LLM PROVIDER API KEYS (Required for live agent task execution)
+# 5. DEFAULT AGENT AND PLANNER (server-side Gemini key)
 # ==============================================================================
-ANTHROPIC_API_KEY=sk-ant-api03-your_actual_anthropic_api_key_here
-OPENAI_API_KEY=sk-proj-your_actual_openai_api_key_here
+DEFAULT_GEMINI_API_KEY=your_gemini_api_key_here
+DEFAULT_AGENT_MODEL=gemini-2.5-flash
 
 # ==============================================================================
 # 6. CORS & PUBLIC DOMAINS
@@ -102,6 +102,8 @@ OPENAI_API_KEY=sk-proj-your_actual_openai_api_key_here
 NEXT_PUBLIC_API_URL=https://api.yourdomain.com
 CORS_ORIGINS=["https://app.yourdomain.com","https://admin.yourdomain.com"]
 ```
+
+Users add their own OpenAI, Anthropic, or other provider keys in the application's agent settings. Those keys are kept in the browser and are not server environment variables.
 
 ---
 

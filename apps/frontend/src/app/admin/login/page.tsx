@@ -5,9 +5,10 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/lib/auth-context";
 import { AuthThreeAnimation } from "@/components/canvas/AuthThreeAnimation";
+import { AuthErrorAlert } from "@/components/auth/auth-error-alert";
+import { authErrorMessage } from "@/lib/auth-error-message";
 import {
   Shield,
-  AlertCircle,
   Eye,
   EyeOff,
   User,
@@ -50,11 +51,7 @@ export default function AdminLoginPage() {
     try {
       await adminLogin(username.trim(), password);
     } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : "Access denied. Administrator privileges required."
-      );
+      setError(authErrorMessage(err, "admin"));
     }
   };
 
@@ -80,16 +77,13 @@ export default function AdminLoginPage() {
             </div>
           </div>
 
-          {/* High-Contrast Error Display */}
+          {/* Form errors stay on this screen. */}
           {error && (
-            <div className="flex items-center gap-3 p-4 rounded-2xl bg-rose-950/80 text-rose-200 text-xs font-medium border border-rose-500/60 shadow-lg shadow-rose-950/40 animate-in fade-in duration-200">
-              <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
-              <div className="flex-1">{error}</div>
-            </div>
+            <AuthErrorAlert title="Admin sign in unsuccessful" message={error} />
           )}
 
           {/* Admin Login Form — Strictly NO signup option */}
-          <form onSubmit={handleSubmit} className="space-y-6">
+          <form onSubmit={handleSubmit} onChange={() => setError(null)} className="space-y-6">
             <div className="space-y-5">
               <div className="space-y-2">
                 <label className="text-xs font-bold text-zinc-200 uppercase tracking-wider flex items-center gap-2 ml-1">

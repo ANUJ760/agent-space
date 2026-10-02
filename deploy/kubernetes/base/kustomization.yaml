@@ -6,7 +6,6 @@ namespace: agent-space
 resources:
   - namespace.yaml
   - configmap.yaml
-  - secrets.yaml
   - backend-deployment.yaml
   - backend-service.yaml
   - worker-deployment.yaml

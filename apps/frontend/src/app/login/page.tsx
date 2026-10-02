@@ -4,9 +4,10 @@ import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import { AuthThreeAnimation } from "@/components/canvas/AuthThreeAnimation";
+import { AuthErrorAlert } from "@/components/auth/auth-error-alert";
+import { authErrorMessage } from "@/lib/auth-error-message";
 import {
   LogIn,
-  AlertCircle,
   UserPlus,
   Eye,
   EyeOff,
@@ -54,11 +55,7 @@ export default function LoginPage() {
     try {
       await login(username.trim(), password);
     } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : "Invalid credentials. Please verify your details."
-      );
+      setError(authErrorMessage(err, "signin"));
     }
   };
 
@@ -78,11 +75,7 @@ export default function LoginPage() {
         organizationName: signupOrg.trim() || undefined,
       });
     } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : "Account creation failed. Please check your information."
-      );
+      setError(authErrorMessage(err, "signup"));
     }
   };
 
@@ -142,17 +135,17 @@ export default function LoginPage() {
             </div>
           </div>
 
-          {/* High-Contrast Error Alert */}
+          {/* Form errors stay on this screen. */}
           {error && (
-            <div className="flex items-center gap-3 p-4 rounded-2xl bg-rose-950/80 text-rose-200 text-xs font-medium border border-rose-500/60 shadow-lg shadow-rose-950/40 animate-in fade-in duration-200">
-              <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
-              <div className="flex-1">{error}</div>
-            </div>
+            <AuthErrorAlert
+              title={mode === "signin" ? "Sign in unsuccessful" : "Could not create account"}
+              message={error}
+            />
           )}
 
           {/* 1. SIGN IN FORM */}
           {mode === "signin" && (
-            <form onSubmit={handleStandardLogin} className="space-y-6">
+            <form onSubmit={handleStandardLogin} onChange={() => setError(null)} className="space-y-6">
               <div className="space-y-5">
                 <div className="space-y-2">
                   <label className="text-xs font-bold text-zinc-200 uppercase tracking-wider flex items-center gap-2 ml-1">
@@ -207,7 +200,7 @@ export default function LoginPage() {
 
           {/* 2. SIGN UP FORM */}
           {mode === "signup" && (
-            <form onSubmit={handleSignupSubmit} className="space-y-6">
+            <form onSubmit={handleSignupSubmit} onChange={() => setError(null)} className="space-y-6">
               <div className="space-y-4">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-2">

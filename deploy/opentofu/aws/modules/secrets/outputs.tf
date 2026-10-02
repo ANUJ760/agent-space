@@ -13,6 +13,11 @@ output "secrets_name" {
   value       = aws_secretsmanager_secret.app_secrets.name
 }
 
+output "default_gemini_api_key_secret_name" {
+  description = "Name of the separately managed default Gemini API key secret"
+  value       = aws_secretsmanager_secret.default_gemini_api_key.name
+}
+
 # Passwords provided only for direct module composition (marked sensitive)
 output "db_password" {
   description = "Database master password for RDS module instantiation"
