@@ -39,7 +39,7 @@ resource "aws_db_subnet_group" "main" {
 resource "aws_db_instance" "main" {
   identifier     = "${var.name_prefix}-postgres"
   engine         = "postgres"
-  engine_version = "16.3"
+  engine_version = "16.15"
   instance_class = var.instance_class
 
   allocated_storage     = var.allocated_storage
@@ -57,14 +57,14 @@ resource "aws_db_instance" "main" {
   publicly_accessible    = false
   multi_az               = var.multi_az
 
-  backup_retention_period   = var.backup_retention_period
-  backup_window             = "03:00-04:00"
-  maintenance_window        = "Mon:04:30-Mon:05:30"
+  backup_retention_period    = var.backup_retention_period
+  backup_window              = "03:00-04:00"
+  maintenance_window         = "Mon:04:30-Mon:05:30"
   auto_minor_version_upgrade = true
-  copy_tags_to_snapshot     = true
-  deletion_protection       = true
-  skip_final_snapshot       = false
-  final_snapshot_identifier = "${var.name_prefix}-postgres-final-snapshot"
+  copy_tags_to_snapshot      = true
+  deletion_protection        = true
+  skip_final_snapshot        = false
+  final_snapshot_identifier  = "${var.name_prefix}-postgres-final-snapshot"
 
   performance_insights_enabled    = true
   performance_insights_kms_key_id = var.kms_key_arn
