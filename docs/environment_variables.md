@@ -47,6 +47,7 @@ All settings can be specified via environment variables or a `.env` file loaded 
 | Variable | Type | Default | Required in Prod | Description |
 |---|---|---|---|---|
 | `NATS_URL` | string | `nats://localhost:4222` | Yes | NATS cluster connection URI. |
+| `NATS_AUTH_TOKEN` | secret | unset | Yes in production | Shared token used by the worker and authenticated NATS server. Generate at least 32 random bytes. |
 | `NATS_STREAM_NAME` | string | `AGENT_SPACE_EVENTS` | No | Dedicated JetStream stream identifier. |
 | `NATS_CONSUMER_GROUP` | string | `agentspace-backend` | No | Durable consumer group name. |
 
@@ -59,6 +60,9 @@ All settings can be specified via environment variables or a `.env` file loaded 
 | `TEMPORAL_HOST` | string | `localhost:7233` | Yes | Temporal gRPC cluster frontend host and port. |
 | `TEMPORAL_NAMESPACE` | string | `default` | Yes | Isolated Temporal namespace. |
 | `TEMPORAL_TASK_QUEUE` | string | `agent-space-tasks` | No | Default task queue polled by worker pods. |
+| `TEMPORAL_API_KEY` | secret | unset | Temporal Cloud only | API key for Temporal Cloud. Leave unset for the bundled self-hosted service. |
+| `TEMPORAL_TLS` | boolean | `false` | Temporal Cloud only | Enables TLS for the SDK connection. |
+| `TEMPORAL_DB_PASSWORD` | secret | unset | Production Compose only | Password for the dedicated Temporal PostgreSQL service. Kubernetes uses the generated RDS password. |
 
 ---
 

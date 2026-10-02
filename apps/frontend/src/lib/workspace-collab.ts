@@ -1,13 +1,21 @@
 import { HocuspocusProvider } from "@hocuspocus/provider";
 import * as Y from "yjs";
 
-export const COLLAB_URL = process.env.NEXT_PUBLIC_COLLAB_URL || "ws://localhost:1234";
+export function collabUrl(): string {
+  const configured = process.env.NEXT_PUBLIC_COLLAB_URL;
+  if (configured?.startsWith("ws://") || configured?.startsWith("wss://")) return configured;
+  if (typeof window !== "undefined") {
+    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+    return `${protocol}//${window.location.host}${configured || "/collab"}`;
+  }
+  return "ws://localhost:1234";
+}
 
 export function openWorkspaceDocument(projectId: string, path: string) {
   const token = localStorage.getItem("agentspace_token") || "";
   const document = new Y.Doc();
   const provider = new HocuspocusProvider({
-    url: COLLAB_URL,
+    url: collabUrl(),
     name: `${projectId}/${encodeURIComponent(path)}`,
     document,
     token,

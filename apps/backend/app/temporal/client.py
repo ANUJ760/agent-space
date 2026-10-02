@@ -75,10 +75,14 @@ class TemporalService:
         host: str = "localhost:7233",
         namespace: str = "default",
         task_queue: str = "agent-space-tasks",
+        api_key: str | None = None,
+        tls: bool = False,
     ):
         self.host = host
         self.namespace = namespace
         self.task_queue = task_queue
+        self.api_key = api_key
+        self.tls = tls
         self._client: Any = None
         self._is_mock = host.startswith("mock") or host.startswith("memory")
         self._mock_workflows: dict[str, MockWorkflowHandle] = {}
@@ -95,6 +99,8 @@ class TemporalService:
         self._client = await Client.connect(
             self.host,
             namespace=self.namespace,
+            api_key=self.api_key,
+            tls=self.tls,
         )
         logger.info("temporal_connected", host=self.host, namespace=self.namespace)
 
@@ -109,6 +115,12 @@ class TemporalService:
         if self._is_mock:
             return True
         return self._client is not None
+
+    @property
+    def client(self) -> Any:
+        if self._client is None:
+            raise RuntimeError("Temporal is not connected")
+        return self._client
 
     async def start_workflow(
         self,
@@ -243,6 +255,8 @@ def get_temporal_service() -> TemporalService:
             host=settings.temporal_host,
             namespace=settings.temporal_namespace,
             task_queue=settings.temporal_task_queue,
+            api_key=settings.temporal_api_key.get_secret_value() if settings.temporal_api_key else None,
+            tls=settings.temporal_tls,
         )
     return _temporal_service
 

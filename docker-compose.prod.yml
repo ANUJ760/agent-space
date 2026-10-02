@@ -19,8 +19,8 @@ services:
       - DEFAULT_GEMINI_API_KEY=${DEFAULT_GEMINI_API_KEY:-}
       - DEFAULT_AGENT_MODEL=${DEFAULT_AGENT_MODEL:-gemini-2.5-flash}
       - NATS_URL=nats://nats:4222
+      - NATS_AUTH_TOKEN=${NATS_AUTH_TOKEN:?Set NATS_AUTH_TOKEN}
       - TEMPORAL_HOST=temporal:7233
-      - KEYCLOAK_SERVER_URL=http://keycloak:8080
     volumes:
       - ${WORKSPACE_HOST_PATH:-./var/workspaces}:/app/var/workspaces
     depends_on:
@@ -28,6 +28,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/health/live')"]
       interval: 30s
@@ -52,14 +54,20 @@ services:
       - DATABASE_URL=postgresql+asyncpg://agentspace:${DB_PASSWORD:?Set DB_PASSWORD for production}@postgres:5432/agentspace
       - REDIS_URL=redis://redis:6379/0
       - NATS_URL=nats://nats:4222
+      - NATS_AUTH_TOKEN=${NATS_AUTH_TOKEN:?Set NATS_AUTH_TOKEN}
       - TEMPORAL_HOST=temporal:7233
+      - DEFAULT_GEMINI_API_KEY=${DEFAULT_GEMINI_API_KEY:-}
+      - DEFAULT_AGENT_MODEL=${DEFAULT_AGENT_MODEL:-gemini-2.5-flash}
+      - WORKSPACE_ROOT=/app/var/workspaces
+    volumes:
+      - ${WORKSPACE_HOST_PATH:-./var/workspaces}:/app/var/workspaces
     depends_on:
-      - backend
-    healthcheck:
-      test: ["CMD", "python", "-c", "import sys; sys.exit(0)"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
+      backend:
+        condition: service_healthy
+      nats:
+        condition: service_started
+      temporal:
+        condition: service_started
     deploy:
       resources:
         limits:
@@ -139,6 +147,78 @@ services:
       timeout: 5s
       retries: 5
 
+  migrate:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.backend
+    image: agentspace/backend:0.1.0
+    restart: "no"
+    entrypoint: ["alembic", "upgrade", "head"]
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://agentspace:${DB_PASSWORD:?Set DB_PASSWORD}@postgres:5432/agentspace
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  nats:
+    image: nats:2.11-alpine
+    restart: unless-stopped
+    command: ["-js", "-sd", "/data", "--auth", "${NATS_AUTH_TOKEN:?Set NATS_AUTH_TOKEN}"]
+    volumes:
+      - nats_data:/data
+
+  temporal:
+    image: temporalio/server:1.28.1
+    restart: unless-stopped
+    environment:
+      - DB=postgres12
+      - DB_PORT=5432
+      - POSTGRES_SEEDS=temporal-postgres
+      - POSTGRES_USER=temporal
+      - POSTGRES_PWD=${TEMPORAL_DB_PASSWORD:?Set TEMPORAL_DB_PASSWORD}
+      - BIND_ON_IP=0.0.0.0
+      - DYNAMIC_CONFIG_FILE_PATH=config/dynamicconfig/development-sql.yaml
+    depends_on:
+      temporal-schema:
+        condition: service_completed_successfully
+    volumes:
+      - ./deploy/temporal/dynamicconfig:/etc/temporal/config/dynamicconfig:ro
+
+  temporal-schema:
+    image: temporalio/admin-tools:1.28.1
+    restart: "no"
+    entrypoint: ["/bin/sh", "-ec"]
+    command:
+      - |
+        temporal-sql-tool --plugin postgres12 --ep temporal-postgres -u temporal -p 5432 --db temporal create || true
+        temporal-sql-tool --plugin postgres12 --ep temporal-postgres -u temporal -p 5432 --db temporal setup-schema -v 0.0 || true
+        temporal-sql-tool --plugin postgres12 --ep temporal-postgres -u temporal -p 5432 --db temporal update-schema -d /etc/temporal/schema/postgresql/v12/temporal/versioned
+        temporal-sql-tool --plugin postgres12 --ep temporal-postgres -u temporal -p 5432 --db temporal_visibility create || true
+        temporal-sql-tool --plugin postgres12 --ep temporal-postgres -u temporal -p 5432 --db temporal_visibility setup-schema -v 0.0 || true
+        temporal-sql-tool --plugin postgres12 --ep temporal-postgres -u temporal -p 5432 --db temporal_visibility update-schema -d /etc/temporal/schema/postgresql/v12/visibility/versioned
+    environment:
+      - SQL_PASSWORD=${TEMPORAL_DB_PASSWORD:?Set TEMPORAL_DB_PASSWORD}
+    depends_on:
+      temporal-postgres:
+        condition: service_healthy
+
+  temporal-postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      - POSTGRES_USER=temporal
+      - POSTGRES_PASSWORD=${TEMPORAL_DB_PASSWORD:?Set TEMPORAL_DB_PASSWORD}
+      - POSTGRES_DB=temporal
+    volumes:
+      - temporal_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U temporal"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
 volumes:
   postgres_data:
   redis_data:
+  nats_data:
+  temporal_data:

@@ -6,6 +6,23 @@ provider "aws" {
   }
 }
 
+resource "aws_ecr_repository" "application" {
+  for_each             = toset(["backend", "worker", "frontend", "collab"])
+  name                 = "${var.name_prefix}/${each.key}"
+  image_tag_mutability = "IMMUTABLE"
+
+  image_scanning_configuration {
+    scan_on_push = true
+  }
+
+  encryption_configuration {
+    encryption_type = "KMS"
+    kms_key         = module.secrets.kms_key_arn
+  }
+
+  tags = var.tags
+}
+
 # 1. Secrets Management & KMS Encryption
 module "secrets" {
   source      = "./modules/secrets"
@@ -31,7 +48,7 @@ module "eks" {
   vpc_id              = module.vpc.vpc_id
   subnet_ids          = module.vpc.private_subnet_ids
   kms_key_arn         = module.secrets.kms_key_arn
-  kubernetes_version  = "1.30"
+  kubernetes_version  = "1.35"
   node_instance_types = ["m6i.xlarge"]
   desired_nodes       = 3
   min_nodes           = 2
@@ -77,7 +94,18 @@ module "cache" {
   tags                = var.tags
 }
 
-# 7. Messaging (SQS, DLQ, SNS)
+# 7. Shared project workspaces (ReadWriteMany for API, workers and editor)
+module "workspace" {
+  source      = "./modules/workspace"
+  name_prefix = var.name_prefix
+  vpc_id      = module.vpc.vpc_id
+  vpc_cidr    = module.vpc.vpc_cidr
+  subnet_ids  = module.vpc.private_subnet_ids
+  kms_key_arn = module.secrets.kms_key_arn
+  tags        = var.tags
+}
+
+# 8. Messaging (SQS, DLQ, SNS)
 module "messaging" {
   source      = "./modules/messaging"
   name_prefix = var.name_prefix
@@ -85,7 +113,7 @@ module "messaging" {
   tags        = var.tags
 }
 
-# 8. GPU Worker Node Group (Inference & Vision)
+# 9. GPU Worker Node Group (Inference & Vision)
 module "gpu" {
   source         = "./modules/gpu"
   cluster_name   = module.eks.cluster_name
@@ -98,7 +126,7 @@ module "gpu" {
   tags           = var.tags
 }
 
-# 9. Monitoring & Production Alarms
+# 10. Monitoring & Production Alarms
 module "monitoring" {
   source                     = "./modules/monitoring"
   name_prefix                = var.name_prefix

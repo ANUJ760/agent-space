@@ -5,7 +5,7 @@ resource "aws_eks_node_group" "gpu" {
   node_role_arn   = var.node_role_arn
   subnet_ids      = var.subnet_ids
 
-  ami_type       = "AL2_x86_64_GPU"
+  ami_type       = "AL2023_x86_64_NVIDIA"
   instance_types = var.instance_types
   capacity_type  = "ON_DEMAND"
 

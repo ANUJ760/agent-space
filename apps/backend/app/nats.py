@@ -83,10 +83,12 @@ class NatsClient:
     def __init__(
         self,
         url: str = "nats://localhost:4222",
+        auth_token: str | None = None,
         stream_name: str = "AGENT_SPACE_EVENTS",
         subjects: list[str] | None = None,
     ):
         self.url = url
+        self.auth_token = auth_token
         self.stream_name = stream_name
         self.subjects = subjects or ["agent_space.>"]
         self._nc: Any = None
@@ -114,6 +116,7 @@ class NatsClient:
 
         self._nc = await nats.connect(
             self.url,
+            token=self.auth_token,
             error_cb=error_cb,
             reconnected_cb=reconnected_cb,
             closed_cb=closed_cb,
@@ -140,6 +143,12 @@ class NatsClient:
             return self._in_memory.is_connected
         return self._nc is not None and self._nc.is_connected
 
+    @property
+    def jetstream(self) -> Any:
+        if self._js is None:
+            raise RuntimeError("NATS is not connected")
+        return self._js
+
     async def ensure_stream(self) -> None:
         """Create or update JetStream stream configuration."""
         if self._is_in_memory:
@@ -148,21 +157,27 @@ class NatsClient:
         if self._js is None:
             await self.connect()
 
-        try:
-            from nats.js.api import RetentionPolicy, StorageType, StreamConfig
+        from nats.js.api import RetentionPolicy, StorageType, StreamConfig
+        from nats.js.errors import BadRequestError, NotFoundError
 
-            config = StreamConfig(
-                name=self.stream_name,
-                subjects=self.subjects,
-                storage=StorageType.FILE,
-                retention=RetentionPolicy.LIMITS,
-                duplicate_window=120,  # 2 minute deduplication window
-            )
-            await self._js.add_stream(config)
-            logger.info("jetstream_stream_ensured", stream=self.stream_name)
-        except Exception as exc:
-            # Stream might already exist
-            logger.debug("jetstream_add_stream_info", error=str(exc))
+        config = StreamConfig(
+            name=self.stream_name,
+            subjects=self.subjects,
+            storage=StorageType.FILE,
+            retention=RetentionPolicy.LIMITS,
+            duplicate_window=120,
+        )
+        try:
+            await self._js.stream_info(self.stream_name)
+        except NotFoundError:
+            try:
+                await self._js.add_stream(config)
+            except BadRequestError:
+                # Another worker may have created it after our lookup.
+                await self._js.update_stream(config)
+        else:
+            await self._js.update_stream(config)
+        logger.info("jetstream_stream_ensured", stream=self.stream_name)
 
     async def publish(
         self,

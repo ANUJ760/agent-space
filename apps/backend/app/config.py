@@ -232,11 +232,14 @@ class Settings(BaseSettings):
 
     # 4. NATS
     nats_url: str = "nats://localhost:4222"
+    nats_auth_token: SecretStr | None = None
     nats_stream_name: str = "AGENT_SPACE_EVENTS"
     nats_consumer_group: str = "agentspace-backend"
 
     # 5. Temporal
     temporal_host: str = "localhost:7233"
+    temporal_api_key: SecretStr | None = None
+    temporal_tls: bool = False
     temporal_namespace: str = "default"
     temporal_task_queue: str = "agent-space-tasks"
 

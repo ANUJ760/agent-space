@@ -9,12 +9,15 @@ resources:
   - backend-deployment.yaml
   - backend-service.yaml
   - worker-deployment.yaml
+  - collab.yaml
+  - nats.yaml
+  - temporal.yaml
+  - migration-job.yaml
   - frontend-deployment.yaml
   - frontend-service.yaml
   - ingress.yaml
   - network-policies.yaml
   - rbac.yaml
-  - image-policy.yaml
 
 commonLabels:
   app.kubernetes.io/name: agent-space

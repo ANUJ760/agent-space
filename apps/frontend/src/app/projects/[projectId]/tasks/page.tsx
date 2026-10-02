@@ -105,6 +105,11 @@ export default function ProjectKanbanPage() {
       if (task.status === "TODO") {
         assigned = await apiFetch<Task>(`/api/v1/tasks/${task.id}/assign`, { method: "POST", body: JSON.stringify({ assignee_type: "AGENT", assignee_id: agent.id }) });
       }
+      if (agent.model_provider === "default") {
+        if (task.status !== "TODO") throw new Error("Default agent tasks run in the background after assignment. Check the live task status for progress.");
+        await fetchData();
+        return;
+      }
       await runAssignedTask(project, assigned, agent);
       await fetchData();
     } catch (cause) {
@@ -286,6 +291,8 @@ export default function ProjectKanbanPage() {
                   ) : (
                     columnTasks.map((task) => {
                       const isTransitioning = transitioningTaskId === task.id;
+                      const selectedAgent = agents.find((agent) => agent.id === (selectedAgents[task.id] || task.assigned_agent_id));
+                      const defaultAgentIsRunning = selectedAgent?.model_provider === "default" && task.status !== "TODO";
 
                       return (
                         <Card
@@ -316,7 +323,7 @@ export default function ProjectKanbanPage() {
                                 <option value="">Assign an agent</option>
                                 {agents.map((agent) => <option key={agent.id} value={agent.id}>{agent.name} · {agent.model_provider}</option>)}
                               </select>
-                              <Button size="sm" className="w-full h-7 text-[11px]" disabled={runningTaskId === task.id || !plannerAvailable || !(selectedAgents[task.id] || task.assigned_agent_id)} onClick={() => handleAssignAndRun(task)}>{runningTaskId === task.id ? "Working in shared files…" : task.status === "TODO" ? "Assign and start" : "Resume agent work"}</Button>
+                              <Button size="sm" className="w-full h-7 text-[11px]" disabled={defaultAgentIsRunning || runningTaskId === task.id || !plannerAvailable || !selectedAgent} onClick={() => handleAssignAndRun(task)}>{defaultAgentIsRunning ? "Running in background…" : runningTaskId === task.id ? "Working in shared files…" : task.status === "TODO" ? "Assign and start" : "Resume agent work"}</Button>
                             </div>}
                             {/* Worker Assignment & Dependencies */}
                             <div className="flex flex-wrap items-center gap-1.5 text-[10px] text-muted-foreground pt-1 border-t">

@@ -11,7 +11,6 @@ metadata:
     nginx.ingress.kubernetes.io/proxy-body-size: "10m"
     nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
     nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
-    nginx.ingress.kubernetes.io/websocket-services: "agent-space-backend"
     nginx.ingress.kubernetes.io/ssl-redirect: "true"
 spec:
   tls:
@@ -38,6 +37,13 @@ spec:
                 name: agent-space-backend
                 port:
                   number: 8000
+          - path: /collab
+            pathType: Prefix
+            backend:
+              service:
+                name: agent-space-collab
+                port:
+                  number: 1234
           # Route frontend SPA/SSR traffic to frontend
           - path: /
             pathType: Prefix

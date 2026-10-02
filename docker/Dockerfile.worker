@@ -30,6 +30,8 @@ RUN pip install --no-cache-dir --upgrade pip && \
 # --- Stage 2: Final Minimal & Hardened Runtime ---
 FROM python:3.11-slim AS runtime
 
+RUN apt-get update && apt-get install -y --no-install-recommends git && rm -rf /var/lib/apt/lists/*
+
 RUN groupadd -g 10001 appuser && \
     useradd -u 10001 -g appuser -s /sbin/nologin -M appuser
 
@@ -41,16 +43,18 @@ ENV PATH="/app/.venv/bin:$PATH" \
     PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     ENVIRONMENT=production \
+    WORKSPACE_ROOT=/app/var/workspaces \
     PYTHONPATH=/app/apps/backend:/app
 
 COPY --chown=appuser:appuser apps /app/apps
 COPY --chown=appuser:appuser agents /app/agents
 COPY --chown=appuser:appuser packages /app/packages
 COPY --chown=appuser:appuser pyproject.toml /app/pyproject.toml
+RUN mkdir -p /app/var/workspaces && chown -R appuser:appuser /app/var
 
 USER 10001:10001
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
   CMD python -c "import sys; sys.exit(0)" || exit 1
 
-ENTRYPOINT ["python", "-m", "app.temporal.worker"]
+ENTRYPOINT ["python", "-m", "app.worker"]

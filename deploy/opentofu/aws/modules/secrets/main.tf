@@ -30,6 +30,11 @@ resource "random_password" "session_secret" {
   special = false
 }
 
+resource "random_password" "nats_auth_token" {
+  length  = 48
+  special = false
+}
+
 # AWS Secrets Manager credentials used to build the backend's runtime URLs.
 resource "aws_secretsmanager_secret" "app_secrets" {
   name        = "${var.name_prefix}/app-secrets"
@@ -47,6 +52,7 @@ resource "aws_secretsmanager_secret_version" "app_secrets" {
     DB_PASSWORD    = random_password.db_password.result
     REDIS_PASSWORD = random_password.redis_auth.result
     SECRET_KEY     = random_password.session_secret.result
+    NATS_AUTH_TOKEN = random_password.nats_auth_token.result
   })
 }
 

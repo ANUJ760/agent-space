@@ -40,6 +40,11 @@ output "redis_primary_endpoint" {
   value       = module.cache.redis_primary_endpoint_address
 }
 
+output "workspace_efs_file_system_id" {
+  description = "Shared EFS file system for human and agent project files"
+  value       = module.workspace.file_system_id
+}
+
 output "events_queue_url" {
   description = "SQS primary event queue URL"
   value       = module.messaging.queue_url
@@ -68,6 +73,11 @@ output "kms_key_arn" {
 output "app_secrets_name" {
   description = "Secrets Manager name for generated application credentials"
   value       = module.secrets.secrets_name
+}
+
+output "ecr_repository_urls" {
+  description = "ECR repositories for backend, worker, frontend and collaboration images"
+  value       = { for name, repository in aws_ecr_repository.application : name => repository.repository_url }
 }
 
 output "default_gemini_api_key_secret_name" {

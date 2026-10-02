@@ -52,6 +52,8 @@ def main() -> int:
     parser.add_argument("--db-name", required=True, help="OpenTofu postgresql_database_name output")
     parser.add_argument("--db-user", default="agentspace_admin", help="RDS username (default: agentspace_admin)")
     parser.add_argument("--redis-endpoint", required=True, help="OpenTofu redis_primary_endpoint output (hostname)")
+    parser.add_argument("--efs-file-system-id", required=True, help="OpenTofu workspace_efs_file_system_id output")
+    parser.add_argument("--public-web-url", required=True, help="Public HTTPS origin, for example https://app.example.com")
     parser.add_argument("--namespace", default="agent-space")
     args = parser.parse_args()
 
@@ -59,7 +61,7 @@ def main() -> int:
         credentials = json.loads(read_secret(args.app_secret_id))
         if not isinstance(credentials, dict):
             raise ValueError("Application secret must contain a JSON object")
-        for key in ("DB_PASSWORD", "REDIS_PASSWORD", "SECRET_KEY"):
+        for key in ("DB_PASSWORD", "REDIS_PASSWORD", "SECRET_KEY", "NATS_AUTH_TOKEN"):
             if not isinstance(credentials.get(key), str) or not credentials[key]:
                 raise ValueError(f"Application secret is missing {key}")
         if len(credentials["SECRET_KEY"]) < 32:
@@ -72,6 +74,11 @@ def main() -> int:
             raise ValueError("Database name is invalid")
         if not args.db_user:
             raise ValueError("Database user is invalid")
+        if not args.efs_file_system_id.startswith("fs-"):
+            raise ValueError("EFS file system ID is invalid")
+        public_url = urlsplit(args.public_web_url)
+        if public_url.scheme != "https" or not public_url.hostname or public_url.path not in ("", "/"):
+            raise ValueError("Public web URL must be an HTTPS origin without a path")
 
         values = {
             "DATABASE_URL": (
@@ -85,6 +92,12 @@ def main() -> int:
             ),
             "SECRET_KEY": credentials["SECRET_KEY"],
             "DEFAULT_GEMINI_API_KEY": gemini_key,
+            "NATS_AUTH_TOKEN": credentials["NATS_AUTH_TOKEN"],
+            "DB_HOST": db_endpoint.rsplit(":", 1)[0],
+            "DB_PORT": db_endpoint.rsplit(":", 1)[1],
+            "DB_USER": args.db_user,
+            "DB_PASSWORD": credentials["DB_PASSWORD"],
+            "CORS_ORIGINS": json.dumps([args.public_web_url.rstrip("/")]),
         }
         secret = {
             "apiVersion": "v1",
@@ -102,6 +115,38 @@ def main() -> int:
         )
         if result.returncode:
             raise ValueError("kubectl could not apply agent-space-secrets; check the namespace and cluster access")
+
+        storage = {
+            "apiVersion": "storage.k8s.io/v1",
+            "kind": "StorageClass",
+            "metadata": {"name": "agent-space-efs"},
+            "provisioner": "efs.csi.aws.com",
+            "parameters": {
+                "provisioningMode": "efs-ap",
+                "fileSystemId": args.efs_file_system_id,
+                "directoryPerms": "0770",
+                "gidRangeStart": "10000",
+                "gidRangeEnd": "20000",
+            },
+            "mountOptions": ["tls"],
+        }
+        pvc = {
+            "apiVersion": "v1",
+            "kind": "PersistentVolumeClaim",
+            "metadata": {"name": "agent-space-workspaces", "namespace": args.namespace},
+            "spec": {
+                "accessModes": ["ReadWriteMany"],
+                "storageClassName": "agent-space-efs",
+                "resources": {"requests": {"storage": "20Gi"}},
+            },
+        }
+        for resource in (storage, pvc):
+            result = subprocess.run(
+                ["kubectl", "apply", "--server-side", "-f", "-"],
+                input=json.dumps(resource), capture_output=True, text=True, check=False,
+            )
+            if result.returncode:
+                raise ValueError("kubectl could not configure the EFS workspace volume")
     except (ValueError, json.JSONDecodeError, OSError) as exc:
         print(f"Secret sync failed: {exc}", file=sys.stderr)
         return 1

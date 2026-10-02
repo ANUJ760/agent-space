@@ -31,23 +31,9 @@ class OIDCClient:
         self._discovery_cache: dict[str, Any] | None = None
         self._jwks_client: PyJWKClient | None = None
         self._mock_keys: dict[str, Any] = {}
-        self._internal_key_pair: tuple[Any, bytes] | None = None
-
-    def _get_or_create_internal_key(self) -> tuple[Any, bytes]:
-        if self._internal_key_pair is None:
-            from cryptography.hazmat.primitives.asymmetric import rsa
-            from cryptography.hazmat.primitives import serialization
-
-            priv = rsa.generate_private_key(public_exponent=65537, key_size=2048)
-            pub = priv.public_key()
-            pem_priv = priv.private_bytes(
-                encoding=serialization.Encoding.PEM,
-                format=serialization.PrivateFormat.PKCS8,
-                encryption_algorithm=serialization.NoEncryption(),
-            )
-            self._internal_key_pair = (pub, pem_priv)
-            self.register_mock_key("agentspace-internal-key", pub)
-        return self._internal_key_pair
+        # All API replicas must verify the same locally issued token after a
+        # restart. The production SECRET_KEY is shared through the pod Secret.
+        self._internal_secret = get_settings().secret_key.get_secret_value()
 
     def generate_token(
         self,
@@ -57,10 +43,9 @@ class OIDCClient:
         roles: list[str],
         expires_in: int = 86400,
     ) -> str:
-        """Issue an authentic RS256 JWT access token compatible with Keycloak verification."""
+        """Issue a JWT using the shared application signing secret."""
         import time
 
-        _, pem_priv = self._get_or_create_internal_key()
         now = int(time.time())
         payload: dict[str, Any] = {
             "sub": sub,
@@ -75,11 +60,13 @@ class OIDCClient:
             "realm_access": {"roles": roles},
             "resource_access": {self._settings.client_id: {"roles": roles}},
         }
-        return jwt.encode(
-            payload,
-            pem_priv,
-            algorithm="RS256",
-            headers={"kid": "agentspace-internal-key"},
+        return str(
+            jwt.encode(
+                payload,
+                self._internal_secret,
+                algorithm="HS256",
+                headers={"kid": "agentspace-internal-v1"},
+            )
         )
 
     @property
@@ -91,7 +78,7 @@ class OIDCClient:
     @property
     def expected_audience(self) -> str:
         """Expected token audience."""
-        return self._settings.audience
+        return str(self._settings.audience)
 
     @property
     def discovery_url(self) -> str:
@@ -136,6 +123,11 @@ class OIDCClient:
 
         kid = unverified_header.get("kid")
 
+        if kid == "agentspace-internal-v1":
+            if unverified_header.get("alg") != "HS256":
+                raise UnauthorizedError("Invalid internal token algorithm.")
+            return self._internal_secret
+
         # 1. Check in-memory registered mock keys first (for testing)
         if kid in self._mock_keys:
             return self._mock_keys[kid]
@@ -157,6 +149,8 @@ class OIDCClient:
             raise UnauthorizedError("Empty token.")
 
         key = self.get_signing_key(token)
+        kid = jwt.get_unverified_header(token).get("kid")
+        algorithms = ["HS256"] if kid == "agentspace-internal-v1" else ["RS256", "ES256"]
 
         try:
             # First attempt standard audience validation
@@ -164,7 +158,7 @@ class OIDCClient:
                 claims: dict[str, Any] = jwt.decode(
                     token,
                     key=key,
-                    algorithms=["RS256", "ES256"],
+                    algorithms=algorithms,
                     issuer=self.expected_issuer,
                     audience=self.expected_audience,
                     options={
@@ -189,7 +183,7 @@ class OIDCClient:
                     claims = jwt.decode(
                         token,
                         key=key,
-                        algorithms=["RS256", "ES256"],
+                        algorithms=algorithms,
                         issuer=self.expected_issuer,
                         options={
                             "verify_signature": True,

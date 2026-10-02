@@ -91,6 +91,145 @@ spec:
           port: 53
 
 ---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: collab-network-policy
+  namespace: agent-space
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: agent-space-collab
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - namespaceSelector: {}
+      ports:
+        - protocol: TCP
+          port: 1234
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: agent-space-backend
+      ports:
+        - protocol: TCP
+          port: 8000
+    - ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: nats-network-policy
+  namespace: agent-space
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: agent-space-nats
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: agent-space-worker
+      ports:
+        - protocol: TCP
+          port: 4222
+
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: migration-network-policy
+  namespace: agent-space
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: agent-space-migrate
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+      ports:
+        - protocol: TCP
+          port: 5432
+    - ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: temporal-schema-network-policy
+  namespace: agent-space
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: agent-space-temporal-schema
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+      ports:
+        - protocol: TCP
+          port: 5432
+    - ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: temporal-network-policy
+  namespace: agent-space
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: agent-space-temporal
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: agent-space-temporal
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: agent-space-worker
+      ports:
+        - protocol: TCP
+          port: 7233
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: agent-space-temporal
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+      ports:
+        - protocol: TCP
+          port: 5432
+    - ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+
+---
 # 4. Backend Network Policy
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
@@ -123,6 +262,17 @@ spec:
         - protocol: TCP
           port: 8000
   egress:
+    # AWS managed PostgreSQL/Redis and HTTPS APIs (Gemini and Git providers).
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+      ports:
+        - protocol: TCP
+          port: 443
+        - protocol: TCP
+          port: 5432
+        - protocol: TCP
+          port: 6379
     # Allow egress to internal services (PostgreSQL, Redis, NATS, Temporal, Keycloak)
     - to:
         - podSelector: {}
@@ -163,6 +313,17 @@ spec:
     - Egress
   ingress: [] # Workers do not receive inbound requests
   egress:
+    # AWS managed PostgreSQL/Redis and Gemini HTTPS.
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+      ports:
+        - protocol: TCP
+          port: 443
+        - protocol: TCP
+          port: 5432
+        - protocol: TCP
+          port: 6379
     # Allow egress to temporal, db, redis, nats, keycloak
     - to:
         - podSelector: {}

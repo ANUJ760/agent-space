@@ -174,7 +174,7 @@ def get_db_manager() -> DatabaseManager:
     return _db_manager
 
 
-def set_db_manager(manager: DatabaseManager) -> None:
+def set_db_manager(manager: DatabaseManager | None) -> None:
     """Set the global DatabaseManager instance (called during app startup)."""
     global _db_manager
     _db_manager = manager

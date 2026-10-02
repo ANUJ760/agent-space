@@ -105,6 +105,88 @@ resource "aws_iam_role_policy_attachment" "node_ecr" {
   role       = aws_iam_role.node.name
 }
 
+data "aws_iam_policy_document" "efs_csi_assume" {
+  statement {
+    actions = ["sts:AssumeRoleWithWebIdentity"]
+    principals {
+      type        = "Federated"
+      identifiers = [aws_iam_openid_connect_provider.main.arn]
+    }
+    condition {
+      test     = "StringLike"
+      variable = "${replace(aws_iam_openid_connect_provider.main.url, "https://", "")}:sub"
+      values   = ["system:serviceaccount:kube-system:efs-csi-*"]
+    }
+    condition {
+      test     = "StringEquals"
+      variable = "${replace(aws_iam_openid_connect_provider.main.url, "https://", "")}:aud"
+      values   = ["sts.amazonaws.com"]
+    }
+  }
+}
+
+resource "aws_iam_role" "efs_csi" {
+  name               = "${var.cluster_name}-efs-csi"
+  assume_role_policy = data.aws_iam_policy_document.efs_csi_assume.json
+  tags               = var.tags
+}
+
+resource "aws_iam_role_policy_attachment" "efs_csi" {
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonEFSCSIDriverPolicy"
+  role       = aws_iam_role.efs_csi.name
+}
+
+data "aws_iam_policy_document" "ebs_csi_assume" {
+  statement {
+    actions = ["sts:AssumeRoleWithWebIdentity"]
+    principals {
+      type        = "Federated"
+      identifiers = [aws_iam_openid_connect_provider.main.arn]
+    }
+    condition {
+      test     = "StringEquals"
+      variable = "${replace(aws_iam_openid_connect_provider.main.url, "https://", "")}:sub"
+      values   = ["system:serviceaccount:kube-system:ebs-csi-controller-sa"]
+    }
+    condition {
+      test     = "StringEquals"
+      variable = "${replace(aws_iam_openid_connect_provider.main.url, "https://", "")}:aud"
+      values   = ["sts.amazonaws.com"]
+    }
+  }
+}
+
+resource "aws_iam_role" "ebs_csi" {
+  name               = "${var.cluster_name}-ebs-csi"
+  assume_role_policy = data.aws_iam_policy_document.ebs_csi_assume.json
+  tags               = var.tags
+}
+
+resource "aws_iam_role_policy_attachment" "ebs_csi" {
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonEBSCSIDriverPolicy"
+  role       = aws_iam_role.ebs_csi.name
+}
+
+resource "aws_eks_addon" "efs_csi" {
+  cluster_name                = aws_eks_cluster.main.name
+  addon_name                  = "aws-efs-csi-driver"
+  service_account_role_arn    = aws_iam_role.efs_csi.arn
+  resolve_conflicts_on_update = "PRESERVE"
+  depends_on                  = [aws_eks_node_group.core, aws_iam_role_policy_attachment.efs_csi]
+
+  tags = var.tags
+}
+
+resource "aws_eks_addon" "ebs_csi" {
+  cluster_name                = aws_eks_cluster.main.name
+  addon_name                  = "aws-ebs-csi-driver"
+  service_account_role_arn    = aws_iam_role.ebs_csi.arn
+  resolve_conflicts_on_update = "PRESERVE"
+  depends_on                  = [aws_eks_node_group.core, aws_iam_role_policy_attachment.ebs_csi]
+
+  tags = var.tags
+}
+
 # Core Managed Node Group
 resource "aws_eks_node_group" "core" {
   cluster_name    = aws_eks_cluster.main.name
@@ -112,6 +194,7 @@ resource "aws_eks_node_group" "core" {
   node_role_arn   = aws_iam_role.node.arn
   subnet_ids      = var.subnet_ids
 
+  ami_type       = "AL2023_x86_64_STANDARD"
   instance_types = var.node_instance_types
   capacity_type  = "ON_DEMAND"
 

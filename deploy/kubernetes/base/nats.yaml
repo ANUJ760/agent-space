@@ -1,0 +1,93 @@
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: agent-space-gp3
+provisioner: ebs.csi.aws.com
+volumeBindingMode: WaitForFirstConsumer
+allowVolumeExpansion: true
+parameters:
+  type: gp3
+  encrypted: "true"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: agent-space-nats
+  namespace: agent-space
+spec:
+  selector:
+    app.kubernetes.io/name: agent-space-nats
+  ports:
+    - name: client
+      port: 4222
+      targetPort: client
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: agent-space-nats
+  namespace: agent-space
+spec:
+  serviceName: agent-space-nats
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: agent-space-nats
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: agent-space-nats
+        app.kubernetes.io/component: messaging
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: nats
+          image: nats:2.11-alpine
+          command: ["/bin/sh", "-ec"]
+          args: ['exec /nats-server -js -sd /data --auth "$NATS_AUTH_TOKEN"']
+          env:
+            - name: NATS_AUTH_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: agent-space-secrets
+                  key: NATS_AUTH_TOKEN
+          ports:
+            - name: client
+              containerPort: 4222
+            - name: monitor
+              containerPort: 8222
+          livenessProbe:
+            tcpSocket:
+              port: client
+          readinessProbe:
+            tcpSocket:
+              port: client
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 1000m
+              memory: 1Gi
+          volumeMounts:
+            - name: data
+              mountPath: /data
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: agent-space-gp3
+        resources:
+          requests:
+            storage: 20Gi
