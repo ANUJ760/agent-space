@@ -68,6 +68,8 @@ services:
         condition: service_started
       temporal:
         condition: service_started
+      temporal-namespace:
+        condition: service_completed_successfully
     deploy:
       resources:
         limits:
@@ -184,6 +186,28 @@ services:
         condition: service_completed_successfully
     volumes:
       - ./deploy/temporal/dynamicconfig:/etc/temporal/config/dynamicconfig:ro
+
+  temporal-namespace:
+    image: temporalio/admin-tools:1.28.1-tctl-1.18.4-cli-1.4.1
+    restart: "no"
+    entrypoint: ["/bin/sh", "-ec"]
+    command:
+      - |
+        attempt=0
+        while [ "$$attempt" -lt 60 ]; do
+          if temporal operator namespace describe --address temporal:7233 --namespace default >/dev/null 2>&1; then
+            sleep 15
+            exit 0
+          fi
+          temporal operator namespace create --address temporal:7233 --namespace default --retention 3d >/dev/null 2>&1 || true
+          attempt=$$((attempt + 1))
+          sleep 2
+        done
+        echo 'Could not register the default Temporal namespace' >&2
+        exit 1
+    depends_on:
+      temporal:
+        condition: service_started
 
   temporal-schema:
     image: temporalio/admin-tools:1.28.1-tctl-1.18.4-cli-1.4.1
