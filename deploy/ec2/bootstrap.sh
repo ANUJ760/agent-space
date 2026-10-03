@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 
-dnf install -y docker git curl
+dnf install -y docker git
 systemctl enable --now docker
 
 mkdir -p /usr/local/lib/docker/cli-plugins
