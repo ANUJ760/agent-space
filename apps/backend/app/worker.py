@@ -51,7 +51,7 @@ async def dispatch_assignments(db: DatabaseManager, nats: NatsClient, temporal: 
     while not stop.is_set():
         try:
             messages = await subscription.fetch(batch=10, timeout=1)
-        except NatsTimeoutError:
+        except (NatsTimeoutError, asyncio.TimeoutError):
             continue
         for message in messages:
             try:
