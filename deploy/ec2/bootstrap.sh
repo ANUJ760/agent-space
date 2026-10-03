@@ -10,5 +10,10 @@ curl -fsSL https://github.com/docker/compose/releases/download/v5.5.1/docker-com
 chmod 0755 /usr/local/lib/docker/cli-plugins/docker-compose
 docker compose version
 
+curl -fsSL https://github.com/docker/buildx/releases/download/v0.37.2/buildx-v0.37.2.linux-amd64 \
+  -o /usr/local/lib/docker/cli-plugins/docker-buildx
+chmod 0755 /usr/local/lib/docker/cli-plugins/docker-buildx
+docker buildx version
+
 mkdir -p /opt/agent-space/var/workspaces
 chown -R 10001:10001 /opt/agent-space/var/workspaces
