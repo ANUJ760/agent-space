@@ -33,6 +33,8 @@ For single-node on-premise production deployments:
 docker compose -f docker-compose.prod.yml up -d
 ```
 
+For the single-host AWS deployment, use the [EC2 runbook](../deploy/ec2/README.md). It provisions one EC2 host with OpenTofu, stores the Compose environment in Secrets Manager, and routes HTTPS through Caddy. The application containers and PostgreSQL, Redis, NATS, and Temporal all run on that host. The older EKS stack is a separate deployment path and is not needed for this setup.
+
 Key differences:
 - Production multi-stage images (`Dockerfile.backend`, `Dockerfile.worker`, `Dockerfile.frontend`).
 - Runs as non-root user `uid 10001:10001`.
