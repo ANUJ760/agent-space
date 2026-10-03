@@ -185,7 +185,7 @@ services:
       - ./deploy/temporal/dynamicconfig:/etc/temporal/config/dynamicconfig:ro
 
   temporal-schema:
-    image: temporalio/admin-tools:1.28.1
+    image: temporalio/admin-tools:1.28.1-tctl-1.18.4-cli-1.4.1
     restart: "no"
     entrypoint: ["/bin/sh", "-ec"]
     command:
