@@ -155,6 +155,7 @@ services:
     restart: "no"
     entrypoint: ["alembic", "upgrade", "head"]
     environment:
+      - SECRET_KEY=${SECRET_KEY:?Set SECRET_KEY for production}
       - DATABASE_URL=postgresql+asyncpg://agentspace:${DB_PASSWORD:?Set DB_PASSWORD}@postgres:5432/agentspace
     depends_on:
       postgres:
