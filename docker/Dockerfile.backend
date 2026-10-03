@@ -56,6 +56,7 @@ COPY --chown=appuser:appuser apps /app/apps
 COPY --chown=appuser:appuser agents /app/agents
 COPY --chown=appuser:appuser packages /app/packages
 COPY --chown=appuser:appuser alembic.ini /app/alembic.ini
+COPY --chown=appuser:appuser migrations /app/migrations
 COPY --chown=appuser:appuser pyproject.toml /app/pyproject.toml
 RUN mkdir -p /app/var/workspaces && chown -R appuser:appuser /app/var
 
